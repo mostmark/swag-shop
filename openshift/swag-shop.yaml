@@ -10,6 +10,8 @@ metadata:
   labels:
     app.kubernetes.io/name: swag-shop
     app.kubernetes.io/part-of: swag-shop-demo
+    # Shows the Quarkus icon in the OpenShift topology view
+    app.openshift.io/runtime: quarkus
 spec:
   replicas: 1
   selector:
