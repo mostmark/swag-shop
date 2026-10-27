@@ -12,7 +12,7 @@ The demo script for the talk is in [docs/DEMO.md](docs/DEMO.md).
 | Feature | Problem | Naive code (problem on) | Fixed code (problem off) | What JFR shows |
 |---|---|---|---|---|
 | Product search | CPU hotspot | `RecursiveEditDistance`: textbook recursive edit distance, exponential work | `IterativeEditDistance`: dynamic programming | "Method Profiling" names `RecursiveEditDistance.distance`; CPU load rises |
-| Product prices | Memory leak | `RequestQuoteCache`: cache keyed on the request id, never hits, never evicts | `ProductQuoteCache`: keyed on the product, bounded, expires | Heap after GC climbs like a staircase; "GC Pressure"; Old Object Samples of `PricePoint` held by `RequestQuoteCache` |
+| Product prices | Memory leak | `RequestQuoteCache`: cache keyed on the request id, never hits, never evicts | `ProductQuoteCache`: keyed on the product, bounded, expires | Heap after GC climbs like a staircase; with paths to GC roots, "Heap Live Set Trend" names the leak candidate held by `RequestQuoteCache.quotes` |
 | Checkout | Lock contention | `SynchronizedInventory`: one global `synchronized` lock held during a slow warehouse call | `PerProductLockInventory`: per-product locks, slow call outside the lock | "Java Blocking" names the `SynchronizedInventory` monitor; latency rises while CPU stays flat |
 
 Both implementations of each feature return the same results (the tests check this); only their performance
@@ -65,13 +65,13 @@ configured values. Set them in `src/main/resources/application.properties` or as
 | Property | Environment variable | Default | Meaning |
 |---|---|---|---|
 | `demo.search.problem-enabled` | `DEMO_SEARCH_PROBLEM_ENABLED` | `false` | Run the naive search |
-| `demo.search.load` | `DEMO_SEARCH_LOAD` | `medium` | `low`, `medium` or `high` (3, 8 or 16 searches/s) |
+| `demo.search.load` | `DEMO_SEARCH_LOAD` | `medium` | `low`, `medium` or `high` (3, 10 or 32 searches/s) |
 | `demo.pricing.problem-enabled` | `DEMO_PRICING_PROBLEM_ENABLED` | `false` | Run the leaking price cache |
 | `demo.pricing.load` | `DEMO_PRICING_LOAD` | `medium` | 5, 15 or 30 product page views/s |
 | `demo.checkout.problem-enabled` | `DEMO_CHECKOUT_PROBLEM_ENABLED` | `false` | Run the globally locked inventory |
 | `demo.checkout.load` | `DEMO_CHECKOUT_LOAD` | `medium` | 15, 40 or 60 checkouts/s |
 | `demo.traffic.enabled` | `DEMO_TRAFFIC_ENABLED` | `true` (`false` in dev and test) | Start the simulated shoppers |
-| `demo.safety.leak-max-heap-ratio` | `DEMO_SAFETY_LEAK_MAX_HEAP_RATIO` | `0.75` | The leak stops growing at this fraction of the maximum heap, so the demo never runs out of memory |
+| `demo.safety.leak-max-heap-ratio` | `DEMO_SAFETY_LEAK_MAX_HEAP_RATIO` | `0.7` | The leak stops growing at this fraction of the maximum heap, so the demo never runs out of memory |
 
 ## Running on OpenShift with Cryostat
 
@@ -85,7 +85,10 @@ scripts/openshift-deploy.sh cryostat-demo1
 The script builds the application, builds the container image inside the cluster and deploys
 [openshift/swag-shop.yaml](openshift/swag-shop.yaml). The pod carries the labels `cryostat.io/name` and
 `cryostat.io/namespace`, so the Cryostat Operator injects the Cryostat Agent. The Agent registers the pod with
-Cryostat and runs a smart trigger that starts a profiling recording when CPU load stays high.
+Cryostat and runs a smart trigger that starts a recording with the memory leak template when the heap stays more
+than 35 % full for 20 seconds. The image adds [cryostat/SwagShopMemoryLeak.jfc](cryostat/SwagShopMemoryLeak.jfc)
+(the Profiling template plus paths to GC roots) to the JDK's templates, so Cryostat, `jcmd` and the Agent can use
+it by name. When the pod stops, the Agent uploads its recordings to Cryostat's archive.
 
 `scripts/cryostat-setup.sh` creates the Cryostat automated rule that starts a continuous recording for every
 Swag Shop pod. Remove everything the demo created with:

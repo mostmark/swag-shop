@@ -66,22 +66,29 @@ spec:
             # A small heap makes the memory leak visible within a couple of minutes
             - name: JAVA_OPTS_APPEND
               value: >-
-                -Xms128m -Xmx256m
+                -Xms128m -Xmx384m
                 -Dquarkus.http.host=0.0.0.0
                 -Djava.util.logging.manager=org.jboss.logmanager.LogManager
-            # Smart trigger: the Agent starts a profiling recording by itself when CPU load stays high
+            # The image defaults to ParallelGC; use G1 (the JVM default) so the memory leak behaves as it does locally
+            - name: GC_CONTAINER_OPTIONS
+              value: -XX:+UseG1GC
+            # Smart trigger: when the heap stays more than 35 % full for 20 seconds (garbage alone never does that),
+            # the Agent starts a recording with the memory leak template by itself.
+            # (ProcessCpuLoad is not usable here: Cryostat Agent 0.7 reads it as 0.0 even when the CPU is busy.)
             - name: CRYOSTAT_AGENT_SMART_TRIGGER_DEFINITIONS
-              value: '[ProcessCpuLoad>0.5;TargetDuration>duration("20s")]~profile'
+              value: '[HeapMemoryUsagePercent>0.35;TargetDuration>duration("20s")]~SwagShopMemoryLeak'
             # Demo state at start-up; everything can be changed on the demo control page
             - name: DEMO_TRAFFIC_ENABLED
               value: "true"
           resources:
             requests:
               cpu: 500m
-              memory: 384Mi
-            limits:
-              cpu: "1"
               memory: 512Mi
+            limits:
+              # High search load needs about 3 cores. With a lower limit the pod is throttled and JFR's sampler
+              # gets too few samples for the "Method Profiling" rule to turn red
+              cpu: "4"
+              memory: 768Mi
           readinessProbe:
             httpGet:
               path: /q/health/ready

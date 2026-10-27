@@ -11,16 +11,16 @@ public enum Scenario {
 
     SEARCH("search", "Product search", "CPU hotspot",
             "Searches get slow and CPU climbs while the shop has spare threads.",
-            "Use high load. Automated Analysis: \"Method Profiling\" points at RecursiveEditDistance.distance. "
-                    + "Dashboard: process CPU load rises; the Agent's smart trigger starts a profiling recording.",
+            "Use high load and a Profiling recording. Automated Analysis: \"Method Profiling\" points at "
+                    + "RecursiveEditDistance.distance. Dashboard: process CPU load rises.",
             "com/demo/shop/search/RecursiveEditDistance.java",
             "com/demo/shop/search/IterativeEditDistance.java"),
 
     PRICING("pricing", "Product prices", "Memory leak",
             "Heap usage climbs like a staircase and never comes back down after GC.",
-            "Record with the SwagShopMemoryLeak template (paths to GC roots). Automated Analysis: \"Heap Live Set "
-                    + "Trend\" turns red; Old Object Samples show PricePoint objects held by RequestQuoteCache. "
-                    + "Dashboard: heap used keeps growing.",
+            "Dashboard: heap used keeps growing. The Agent's smart trigger starts a SwagShopMemoryLeak recording "
+                    + "(paths to GC roots); its Automated Analysis turns \"Heap Live Set Trend\" red and names the leak "
+                    + "candidate: PricePoint objects held by RequestQuoteCache.",
             "com/demo/shop/pricing/RequestQuoteCache.java",
             "com/demo/shop/pricing/ProductQuoteCache.java"),
 

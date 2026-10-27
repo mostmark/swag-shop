@@ -91,6 +91,12 @@ COPY --chown=185 target/quarkus-app/*.jar /deployments/
 COPY --chown=185 target/quarkus-app/app/ /deployments/app/
 COPY --chown=185 target/quarkus-app/quarkus/ /deployments/quarkus/
 
+# The demo's memory leak template (profile settings plus paths to GC roots) becomes a predefined JFR template,
+# so jcmd, Cryostat and Cryostat Agent smart triggers can use it by name
+USER root
+COPY cryostat/SwagShopMemoryLeak.jfc /usr/lib/jvm/jre/lib/jfr/SwagShopMemoryLeak.jfc
+RUN chmod 644 /usr/lib/jvm/jre/lib/jfr/SwagShopMemoryLeak.jfc
+
 EXPOSE 8080
 USER 185
 ENV JAVA_OPTS_APPEND="-Dquarkus.http.host=0.0.0.0 -Djava.util.logging.manager=org.jboss.logmanager.LogManager"

@@ -41,7 +41,7 @@ public class ShopperSimulator {
 
     /** Requests per second at LOW, MEDIUM and HIGH load. */
     static final Map<Scenario, int[]> RATES = Map.of(
-            Scenario.SEARCH, new int[] { 3, 10, 24 },
+            Scenario.SEARCH, new int[] { 3, 10, 32 },
             Scenario.PRICING, new int[] { 5, 15, 30 },
             Scenario.CHECKOUT, new int[] { 15, 40, 60 });
 
