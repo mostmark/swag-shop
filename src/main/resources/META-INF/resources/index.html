@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Swag Shop</title>
+  <link rel="icon" href="/img/brand/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/vendor.css">
+  <link rel="stylesheet" href="/css/shop.css">
+  <script src="/js/importmap.js"></script>
+  <script type="module" src="/js/home.js"></script>
+</head>
+<body>
+  <header class="masthead">
+    <div class="container">
+      <a class="brand" href="/">
+        <img src="/img/brand/logo-red-hat-reverse.svg" alt="Red Hat" width="135" height="32">
+        <span class="brand-name">Swag Shop</span>
+      </a>
+      <nav class="nav" aria-label="Main">
+        <a href="/" aria-current="page"><rh-icon set="ui" icon="tag"></rh-icon><span class="label">Shop</span></a>
+        <a href="/cart.html"><rh-icon set="ui" icon="shopping-cart"></rh-icon><span class="label">Cart</span><span class="cart-count" hidden>0</span></a>
+        <a href="/demo.html"><rh-icon set="ui" icon="settings"></rh-icon><span class="label">Demo control</span></a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="hero">
+      <div>
+        <h1>Swag for people who ship</h1>
+        <p class="lede">Fedoras, mugs, hoodies and stickers for long conference days and longer debugging sessions.</p>
+        <form class="search-form" role="search">
+          <label class="visually-hidden" for="search">Search products</label>
+          <input id="search" name="q" type="search" placeholder="Search, typos welcome: hoody, backpak…" autocomplete="off">
+          <rh-button type="submit" icon="search" icon-set="ui">Search</rh-button>
+        </form>
+      </div>
+      <div class="hero-art">
+        <img src="/img/brand/illustration-storefront.svg" alt="" aria-hidden="true">
+      </div>
+    </section>
+
+    <section aria-labelledby="results-title">
+      <div class="results-header">
+        <h2 id="results-title">All products</h2>
+        <span class="timing" id="timing" aria-live="polite"></span>
+      </div>
+      <div class="product-grid" id="products" aria-busy="true"></div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <span class="footer-logo"></span>
+      <small>A demo shop for JDK Flight Recorder and Cryostat. No real orders are placed.</small>
+      <rh-scheme-toggle></rh-scheme-toggle>
+    </div>
+  </footer>
+</body>
+</html>

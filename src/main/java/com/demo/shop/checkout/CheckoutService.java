@@ -1,0 +1,85 @@
+package com.demo.shop.checkout;
+
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
+
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+
+import com.demo.shop.catalog.Product;
+import com.demo.shop.catalog.ProductCatalog;
+import com.demo.shop.demo.DemoSettings;
+import com.demo.shop.demo.Scenario;
+import com.demo.shop.inventory.Inventory;
+import com.demo.shop.inventory.PerProductLockInventory;
+import com.demo.shop.inventory.SynchronizedInventory;
+
+@ApplicationScoped
+public class CheckoutService {
+
+    public static final int MAX_QUANTITY = 10;
+
+    public record OrderLine(String productId, int quantity) {
+    }
+
+    public record OrderItem(String productId, String name, int quantity, BigDecimal unitPrice, BigDecimal lineTotal) {
+    }
+
+    public record Order(String orderId, List<OrderItem> items, BigDecimal total, Instant placedAt) {
+    }
+
+    private final AtomicLong ordersPlaced = new AtomicLong();
+
+    @Inject
+    ProductCatalog catalog;
+
+    @Inject
+    DemoSettings settings;
+
+    @Inject
+    SynchronizedInventory synchronizedInventory;
+
+    @Inject
+    PerProductLockInventory perProductLockInventory;
+
+    public Order checkout(List<OrderLine> lines) {
+        if (lines == null || lines.isEmpty()) {
+            throw new IllegalArgumentException("The cart is empty");
+        }
+        List<Product> products = new ArrayList<>();
+        for (OrderLine line : lines) {
+            if (line.quantity() < 1 || line.quantity() > MAX_QUANTITY) {
+                throw new IllegalArgumentException("Quantity must be between 1 and " + MAX_QUANTITY);
+            }
+            products.add(catalog.findById(line.productId())
+                    .orElseThrow(() -> new IllegalArgumentException("Unknown product " + line.productId())));
+        }
+
+        Inventory inventory = activeInventory();
+        List<OrderItem> items = new ArrayList<>();
+        BigDecimal total = BigDecimal.ZERO;
+        for (int i = 0; i < lines.size(); i++) {
+            OrderLine line = lines.get(i);
+            Product product = products.get(i);
+            inventory.reserve(product.id(), line.quantity());
+            BigDecimal lineTotal = product.price().multiply(BigDecimal.valueOf(line.quantity()));
+            items.add(new OrderItem(product.id(), product.name(), line.quantity(), product.price(), lineTotal));
+            total = total.add(lineTotal);
+        }
+        ordersPlaced.incrementAndGet();
+        String orderId = "SW-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        return new Order(orderId, items, total, Instant.now());
+    }
+
+    public Inventory activeInventory() {
+        return settings.problemEnabled(Scenario.CHECKOUT) ? synchronizedInventory : perProductLockInventory;
+    }
+
+    public long ordersPlaced() {
+        return ordersPlaced.get();
+    }
+}

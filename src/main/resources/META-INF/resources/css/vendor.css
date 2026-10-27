@@ -1,0 +1,10 @@
+/* Red Hat Design System tokens and Red Hat fonts, served from the mvnpm jars declared in pom.xml */
+@import url("/_static/at/rhds/tokens/3.2.0/css/global.css");
+@import url("/_static/at/rhds/tokens/3.2.0/css/default-theme.css");
+@import url("/_static/at/fontsource/red-hat-display/5.3.0/400.css");
+@import url("/_static/at/fontsource/red-hat-display/5.3.0/500.css");
+@import url("/_static/at/fontsource/red-hat-display/5.3.0/700.css");
+@import url("/_static/at/fontsource/red-hat-text/5.3.0/400.css");
+@import url("/_static/at/fontsource/red-hat-text/5.3.0/500.css");
+@import url("/_static/at/fontsource/red-hat-text/5.3.0/700.css");
+@import url("/_static/at/fontsource/red-hat-mono/5.3.0/400.css");

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Product · Swag Shop</title>
+  <link rel="icon" href="/img/brand/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/vendor.css">
+  <link rel="stylesheet" href="/css/shop.css">
+  <script src="/js/importmap.js"></script>
+  <script type="module" src="/js/product.js"></script>
+</head>
+<body>
+  <header class="masthead">
+    <div class="container">
+      <a class="brand" href="/">
+        <img src="/img/brand/logo-red-hat-reverse.svg" alt="Red Hat" width="135" height="32">
+        <span class="brand-name">Swag Shop</span>
+      </a>
+      <nav class="nav" aria-label="Main">
+        <a href="/" aria-current="page"><rh-icon set="ui" icon="tag"></rh-icon><span class="label">Shop</span></a>
+        <a href="/cart.html"><rh-icon set="ui" icon="shopping-cart"></rh-icon><span class="label">Cart</span><span class="cart-count" hidden>0</span></a>
+        <a href="/demo.html"><rh-icon set="ui" icon="settings"></rh-icon><span class="label">Demo control</span></a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <a class="back-link" href="/"><rh-icon set="ui" icon="arrow-left"></rh-icon> All products</a>
+    <div id="product" aria-live="polite">
+      <rh-spinner>Loading product…</rh-spinner>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <span class="footer-logo"></span>
+      <small>A demo shop for JDK Flight Recorder and Cryostat. No real orders are placed.</small>
+      <rh-scheme-toggle></rh-scheme-toggle>
+    </div>
+  </footer>
+</body>
+</html>

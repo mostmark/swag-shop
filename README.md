@@ -1,62 +1,122 @@
-# faulty-app
+# Swag Shop: a JFR and Cryostat demo application
 
-This project uses Quarkus, the Supersonic Subatomic Java Framework.
+A small web shop that sells conference swag, built with Quarkus and the Red Hat Design System. It has three
+performance problems that can be switched on and off while it runs. Each problem is real code in a
+realistic place, so JDK Flight Recorder (JFR), JDK Mission Control (JMC) and Cryostat find it the way they would
+in production.
 
-If you want to learn more about Quarkus, please visit its website: <https://quarkus.io/>.
+The demo script for the talk is in [docs/DEMO.md](docs/DEMO.md).
 
-## Running the application in dev mode
+## The scenarios
 
-You can run your application in dev mode that enables live coding using:
+| Feature | Problem | Naive code (problem on) | Fixed code (problem off) | What JFR shows |
+|---|---|---|---|---|
+| Product search | CPU hotspot | `RecursiveEditDistance`: textbook recursive edit distance, exponential work | `IterativeEditDistance`: dynamic programming | "Method Profiling" names `RecursiveEditDistance.distance`; CPU load rises |
+| Product prices | Memory leak | `RequestQuoteCache`: cache keyed on the request id, never hits, never evicts | `ProductQuoteCache`: keyed on the product, bounded, expires | Heap after GC climbs like a staircase; "GC Pressure"; Old Object Samples of `PricePoint` held by `RequestQuoteCache` |
+| Checkout | Lock contention | `SynchronizedInventory`: one global `synchronized` lock held during a slow warehouse call | `PerProductLockInventory`: per-product locks, slow call outside the lock | "Java Blocking" names the `SynchronizedInventory` monitor; latency rises while CPU stays flat |
 
-```shell script
-./mvnw quarkus:dev
+Both implementations of each feature return the same results (the tests check this); only their performance
+differs. Switching a scenario to the fixed code stands in for deploying the fix.
+
+Built-in **simulated shoppers** send a steady stream of requests to all three features, so problems show up
+without anyone clicking around. Each feature's load can be set to low, medium or high.
+
+## Running locally
+
+Requires Java 21.
+
+```shell
+./mvnw quarkus:dev                         # dev mode, simulated shoppers off
+./mvnw package && java -Xmx256m -jar target/quarkus-app/quarkus-run.jar    # packaged, shoppers on
 ```
 
-> **_NOTE:_**  Quarkus now ships with a Dev UI, which is available in dev mode only at <http://localhost:8080/q/dev/>.
+Open <http://localhost:8080> for the shop and <http://localhost:8080/demo.html> for the demo control page.
 
-## Packaging and running the application
+### Recording with JFR
 
-The application can be packaged using:
+```shell
+# Start with a recording that is written to a file when the JVM exits ...
+java -Xmx256m -XX:StartFlightRecording=filename=swag-shop.jfr,settings=profile -jar target/quarkus-app/quarkus-run.jar
 
-```shell script
-./mvnw package
+# ... or start and dump a recording on a running JVM
+jcmd $(pgrep -f quarkus-run.jar) JFR.start name=demo settings=profile
+jcmd $(pgrep -f quarkus-run.jar) JFR.dump name=demo filename=swag-shop.jfr
 ```
 
-It produces the `quarkus-run.jar` file in the `target/quarkus-app/` directory.
-Be aware that it’s not an _über-jar_ as the dependencies are copied into the `target/quarkus-app/lib/` directory.
+Open the file in JDK Mission Control, or print JMC's automated analysis in the terminal:
 
-The application is now runnable using `java -jar target/quarkus-app/quarkus-run.jar`.
-
-If you want to build an _über-jar_, execute the following command:
-
-```shell script
-./mvnw package -Dquarkus.package.jar.type=uber-jar
+```shell
+scripts/jfr-rules.sh swag-shop.jfr          # rules that score INFO or WARNING
+scripts/jfr-rules.sh swag-shop.jfr --all    # every rule
 ```
 
-The application, packaged as an _über-jar_, is now runnable using `java -jar target/*-runner.jar`.
+`jfr-rules.sh` uses the analysis libraries of a local JMC installation (set `JMC_HOME` if JMC is not in
+`/Applications`).
 
-## Creating a native executable
+The shop writes a custom JFR event, **Swag Shop › Demo › Problem Toggled** (`com.demo.shop.ProblemToggled`), each
+time a scenario changes, so a recording shows exactly when a problem started and stopped. The `quarkus-jfr`
+extension adds an event per REST request.
 
-You can create a native executable using:
+## Configuration
 
-```shell script
-./mvnw package -Dnative
+Everything can be changed at runtime on the demo control page; **Reset to defaults** goes back to the
+configured values. Set them in `src/main/resources/application.properties` or as environment variables.
+
+| Property | Environment variable | Default | Meaning |
+|---|---|---|---|
+| `demo.search.problem-enabled` | `DEMO_SEARCH_PROBLEM_ENABLED` | `false` | Run the naive search |
+| `demo.search.load` | `DEMO_SEARCH_LOAD` | `medium` | `low`, `medium` or `high` (3, 8 or 16 searches/s) |
+| `demo.pricing.problem-enabled` | `DEMO_PRICING_PROBLEM_ENABLED` | `false` | Run the leaking price cache |
+| `demo.pricing.load` | `DEMO_PRICING_LOAD` | `medium` | 5, 15 or 30 product page views/s |
+| `demo.checkout.problem-enabled` | `DEMO_CHECKOUT_PROBLEM_ENABLED` | `false` | Run the globally locked inventory |
+| `demo.checkout.load` | `DEMO_CHECKOUT_LOAD` | `medium` | 15, 40 or 60 checkouts/s |
+| `demo.traffic.enabled` | `DEMO_TRAFFIC_ENABLED` | `true` (`false` in dev and test) | Start the simulated shoppers |
+| `demo.safety.leak-max-heap-ratio` | `DEMO_SAFETY_LEAK_MAX_HEAP_RATIO` | `0.75` | The leak stops growing at this fraction of the maximum heap, so the demo never runs out of memory |
+
+## Running on OpenShift with Cryostat
+
+Requires an OpenShift cluster with the Cryostat Operator, a Cryostat instance whose target namespaces include
+the namespace you deploy to, and `oc` logged in.
+
+```shell
+scripts/openshift-deploy.sh cryostat-demo1
 ```
 
-Or, if you don't have GraalVM installed, you can run the native executable build in a container using:
+The script builds the application, builds the container image inside the cluster and deploys
+[openshift/swag-shop.yaml](openshift/swag-shop.yaml). The pod carries the labels `cryostat.io/name` and
+`cryostat.io/namespace`, so the Cryostat Operator injects the Cryostat Agent. The Agent registers the pod with
+Cryostat and runs a smart trigger that starts a profiling recording when CPU load stays high.
 
-```shell script
-./mvnw package -Dnative -Dquarkus.native.container-build=true
+`scripts/cryostat-setup.sh` creates the Cryostat automated rule that starts a continuous recording for every
+Swag Shop pod. Remove everything the demo created with:
+
+```shell
+oc delete all,imagestream,buildconfig -l app.kubernetes.io/part-of=swag-shop-demo -n cryostat-demo1
 ```
 
-You can then execute your native executable with: `./target/faulty-app-1.0-runner`
+## Project layout
 
-If you want to learn more about building native executables, please consult <https://quarkus.io/guides/maven-tooling>.
+```
+src/main/java/com/demo/shop/
+  catalog/      products
+  search/       product search and the two edit distance implementations   (CPU hotspot)
+  pricing/      price quotes and the two quote caches                       (memory leak)
+  inventory/    stock and the two inventory implementations                 (lock contention)
+  checkout/     orders
+  api/          REST API of the shop
+  demo/         scenario switches, configuration, simulated shoppers, JFR event, demo control API
+src/main/resources/META-INF/resources/   web pages (Red Hat Design System web components)
+openshift/                               OpenShift resources
+scripts/                                 deployment, Cryostat setup and JFR analysis scripts
+docs/DEMO.md                             demo script for the talk
+```
 
-## Provided Code
+The web pages use the Red Hat Design System (`@rhds/elements`, `@rhds/tokens`) and the Red Hat fonts, served from
+[mvnpm](https://mvnpm.org) jars, so there is no JavaScript build. The product photos were generated for this
+demo.
 
-### REST
+## Tests
 
-Easily start your REST Web Services
-
-[Related guide section...](https://quarkus.io/guides/getting-started-reactive#reactive-jax-rs-resources)
+```shell
+./mvnw verify -DskipITs=false    # unit tests, API tests, and the API tests again against the packaged app
+```

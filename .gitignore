@@ -46,3 +46,10 @@ nb-configuration.xml
 
 # IDE migration/upgrade tooling
 .github/modernize/
+
+# Original full-size generated product images (the app uses resized copies in src/main/resources)
+assets/
+
+# JFR recordings made while preparing or rehearsing the demo
+*.jfr
+recordings/
