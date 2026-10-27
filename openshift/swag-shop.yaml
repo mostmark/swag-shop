@@ -1,35 +1,8 @@
 # Swag Shop on OpenShift, monitored by Cryostat.
 #
-# Deploy with scripts/openshift-deploy.sh, which builds the image in the cluster from the local build.
+# Build and push the image with scripts/build-push-container.sh, then deploy with scripts/openshift-deploy.sh.
 # Every resource carries the label app.kubernetes.io/part-of=swag-shop-demo, so the whole demo can be removed with:
-#   oc delete all,imagestream,buildconfig -l app.kubernetes.io/part-of=swag-shop-demo -n <namespace>
-apiVersion: image.openshift.io/v1
-kind: ImageStream
-metadata:
-  name: swag-shop
-  labels:
-    app.kubernetes.io/name: swag-shop
-    app.kubernetes.io/part-of: swag-shop-demo
----
-apiVersion: build.openshift.io/v1
-kind: BuildConfig
-metadata:
-  name: swag-shop
-  labels:
-    app.kubernetes.io/name: swag-shop
-    app.kubernetes.io/part-of: swag-shop-demo
-spec:
-  source:
-    type: Binary
-  strategy:
-    type: Docker
-    dockerStrategy:
-      dockerfilePath: src/main/docker/Dockerfile.jvm
-  output:
-    to:
-      kind: ImageStreamTag
-      name: swag-shop:latest
----
+#   oc delete all -l app.kubernetes.io/part-of=swag-shop-demo -n <namespace>
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -37,10 +10,6 @@ metadata:
   labels:
     app.kubernetes.io/name: swag-shop
     app.kubernetes.io/part-of: swag-shop-demo
-  annotations:
-    # Roll out a new pod whenever a new image is built
-    image.openshift.io/triggers: >-
-      [{"from":{"kind":"ImageStreamTag","name":"swag-shop:latest"},"fieldPath":"spec.template.spec.containers[?(@.name==\"swag-shop\")].image"}]
 spec:
   replicas: 1
   selector:
@@ -57,7 +26,9 @@ spec:
     spec:
       containers:
         - name: swag-shop
-          image: swag-shop:latest
+          image: quay.io/mostmark/swag-shop:latest
+          # Always pull, so restarting the pod picks up a newly pushed :latest
+          imagePullPolicy: Always
           ports:
             - name: http
               containerPort: 8080

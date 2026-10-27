@@ -79,11 +79,21 @@ Requires an OpenShift cluster with the Cryostat Operator, a Cryostat instance wh
 the namespace you deploy to, and `oc` logged in.
 
 ```shell
-scripts/openshift-deploy.sh cryostat-demo1
+export QUAY_USER=mostmark
+scripts/build-push-container.sh               # build the app and a multi-arch image, push it to quay.io
+scripts/openshift-deploy.sh cryostat-demo1    # deploy it and restart the pod to pull the new image
 ```
 
-The script builds the application, builds the container image inside the cluster and deploys
-[openshift/swag-shop.yaml](openshift/swag-shop.yaml). The pod carries the labels `cryostat.io/name` and
+`build-push-container.sh` builds the application, builds the image from
+[src/main/docker/Dockerfile.jvm](src/main/docker/Dockerfile.jvm) for `linux/amd64` and `linux/arm64` with podman
+and pushes it as one manifest list to `quay.io/$QUAY_USER/swag-shop:latest` (log in first with
+`podman login quay.io`; the repository must be public, or the namespace needs a pull secret). The same image runs
+on an Apple silicon laptop (`podman run --rm -p 8080:8080 quay.io/$QUAY_USER/swag-shop:latest`) and on an x86
+cluster.
+
+`openshift-deploy.sh` applies [openshift/swag-shop.yaml](openshift/swag-shop.yaml), which uses
+`quay.io/mostmark/swag-shop:latest` (with `QUAY_USER` set, the script switches to your repository). The pod carries
+the labels `cryostat.io/name` and
 `cryostat.io/namespace`, so the Cryostat Operator injects the Cryostat Agent. The Agent registers the pod with
 Cryostat and runs a smart trigger that starts a recording with the memory leak template when the heap stays more
 than 35 % full for 20 seconds. The image adds [cryostat/SwagShopMemoryLeak.jfc](cryostat/SwagShopMemoryLeak.jfc)
@@ -94,7 +104,7 @@ it by name. When the pod stops, the Agent uploads its recordings to Cryostat's a
 Swag Shop pod. Remove everything the demo created with:
 
 ```shell
-oc delete all,imagestream,buildconfig -l app.kubernetes.io/part-of=swag-shop-demo -n cryostat-demo1
+oc delete all -l app.kubernetes.io/part-of=swag-shop-demo -n cryostat-demo1
 ```
 
 ## Project layout
@@ -110,7 +120,7 @@ src/main/java/com/demo/shop/
   demo/         scenario switches, configuration, simulated shoppers, JFR event, demo control API
 src/main/resources/META-INF/resources/   web pages (Red Hat Design System web components)
 openshift/                               OpenShift resources
-scripts/                                 deployment, Cryostat setup and JFR analysis scripts
+scripts/                                 image build and push, deployment, Cryostat setup and JFR analysis scripts
 docs/DEMO.md                             demo script for the talk
 ```
 

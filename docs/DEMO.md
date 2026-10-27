@@ -35,7 +35,8 @@ java -Xmx256m -jar target/quarkus-app/quarkus-run.jar
 
 ```shell
 oc login ...
-scripts/openshift-deploy.sh cryostat-demo1     # only if the app changed
+scripts/build-push-container.sh                # only if the app changed (needs QUAY_USER and podman login)
+scripts/openshift-deploy.sh cryostat-demo1     # applies the resources and restarts the pod
 scripts/cryostat-setup.sh                      # creates the automated rule (once; safe to run again)
 oc delete pod -n cryostat-demo1 -l app.kubernetes.io/name=swag-shop   # fresh JVM, empty heap, trigger re-armed
 ```
@@ -44,6 +45,8 @@ oc delete pod -n cryostat-demo1 -l app.kubernetes.io/name=swag-shop   # fresh JV
   Shoppers on, everything **Fixed**.
 - [ ] Cryostat console: `https://cryostat-sample-cryostat.apps.<cluster-domain>`. The new `swag-shop-…` pod
   appears as a target about 15 seconds after it starts.
+- [ ] `<cluster-domain>` is your cluster's apps domain; `oc get route -n cryostat-demo1 swag-shop` and
+  `oc get route -n cryostat cryostat-sample` show the full host names.
 - [ ] The automated rule `swag_shop_continuous` has started a recording on the pod (Recordings view).
 - [ ] Optional: delete old archives from earlier rehearsals so the Archives view is clean.
 - [ ] Browser zoom at 125–150% for the projector.
