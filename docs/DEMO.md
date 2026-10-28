@@ -72,12 +72,12 @@ Check any recording without opening JMC: `scripts/jfr-rules.sh recordings/<file>
 | Time | Do | Say |
 |---|---|---|
 | 0:00 | Show the shop: the product grid, a search for `hoody` (typos welcome). | "A normal Quarkus web shop. Simulated shoppers are using it right now." |
-| 0:30 | Demo control: **Product search** → switch on, load **High**. Back in the shop, search for `waterbottle`: the search takes about 1.5 seconds, and the timing turns red. Short words such as `hoody` stay fast, because the cost grows with the length of the search word: use a long one. | "Customers complain that search is slow. The CPU is busy, but where?" |
+| 0:30 | Demo control: **Product search** → switch on, load **High**. Wait about 5 seconds, then search the shop for `hoodie` (any word works): the page hangs for 2–4 seconds and the timing turns red. | "Customers complain that search is slow. The CPU is busy, but where?" |
 | 1:00 | Paste the `JFR.start` command. | "JFR is part of the JVM. No agent, no restart: we just ask the running JVM to record. The overhead is around 1 %." |
 | 2:00 | Paste the `JFR.dump` command after about 60 seconds; open `recordings/live-cpu.jfr` in JMC. | |
 | 2:15 | **Automated Analysis Results**: "Method Profiling" is red and names `RecursiveEditDistance.distance`. Open the **Method Profiling** page (or the flame graph) to show the deep recursion. | "JMC ran its analysis rules for us, and named the exact method." |
-| 3:00 | IDE: `RecursiveEditDistance`. The textbook recursion calls itself three times per character, so the work explodes: each extra letter in the search word makes it about 2.5 times slower. Show `IterativeEditDistance`. | "Correct code, exponential cost. The fix is the dynamic programming version." |
-| 4:00 | Demo control: switch **Product search** off (fixed code). Search for `waterbottle` again: a few milliseconds. | "In real life this is a new deployment; here a switch saves us the build." |
+| 3:00 | IDE: `RecursiveEditDistance`. The textbook recursion calls itself three times per character, so the work explodes: each extra letter in the search word makes it about 2.5 times slower. Long searches from other shoppers hold all three search slots (`ProductSearchService.MAX_CONCURRENT_SEARCHES`), so even a short search waits in line. Show `IterativeEditDistance`. | "Correct code, exponential cost. The fix is the dynamic programming version." |
+| 4:00 | Demo control: switch **Product search** off (fixed code). Search for `hoodie` again: a few milliseconds. | "In real life this is a new deployment; here a switch saves us the build." |
 | 4:30 | Bridge to the slides: | "Now imagine this is pod 3 of 12 in OpenShift. No JMC attached, no shell, and the evidence disappears when the pod restarts." |
 
 Also worth a mention: the recording contains the shop's own **Swag Shop › Demo › Problem Toggled** event, which shows
@@ -144,6 +144,10 @@ and open its Automated Analysis: "Method Profiling" names `RecursiveEditDistance
   Without them, JMC's "Heap Live Set Trend" rule scores a clear leak as OK. `cryostat/SwagShopMemoryLeak.jfc` is the
   Profiling template plus GC-root paths; the image copies it into the JDK, so JFR, Cryostat and the Agent can
   use it by name.
+- **Why does a short search hang when only long searches are expensive?** Searches use a lot of CPU, so the shop
+  runs at most three at once and queues the rest, which protects checkout and product pages. With the naive code at
+  high load, slow searches from other shoppers keep all three slots busy, and every search waits in line behind
+  them. JFR records the waiting as thread park events in `Semaphore.acquire`.
 - **What is the overhead?** The Continuous template is designed for production (around 1 %). Profiling and
   memory-leak recordings cost more and are meant for minutes, not days.
 
@@ -165,7 +169,7 @@ The smart trigger fires once per JVM, so delete the pod before rehearsing the me
 | No smart trigger recording | Is **Product prices** on and the load **High**? The heap must stay above 35 % for 20 seconds. Otherwise start a recording by hand with the **SwagShopMemoryLeak** template. |
 | The leak stops growing | By design: it stops at 70 % of the heap (`demo.safety.leak-max-heap-ratio`) so the pod never runs out of memory. Switch the scenario off and on to clear it. |
 | The shop page looks outdated after a redeploy | Reload the page. |
-| A search with the problem on is not slow | Search for a long word such as `waterbottle` or `laptopbackpack` (about 1.5 s on an Apple silicon laptop). Words of six letters or fewer take only a few dozen milliseconds even with the naive code. |
+| A search with the problem on is not slow | Set the search load to **High** and wait a few seconds. Only high load sends more searches than the naive code can handle, so they queue for the three search slots; at medium load a short word such as `hoodie` still takes only about 30 ms. |
 | Cryostat analysis shows "Method Profiling" only as INFO | Use **High** search load; at medium load the hot method uses less than one CPU. Keep the pod's CPU limit at 4: with 2 cores the pod is throttled, JFR takes far fewer samples and the rule stays at INFO. |
 
 ---

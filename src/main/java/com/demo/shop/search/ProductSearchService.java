@@ -6,6 +6,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.Semaphore;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -32,9 +33,17 @@ public class ProductSearchService {
     /** Longer search terms are cut to this length; the shorter prefix still finds the right products. */
     static final int MAX_TERM_LENGTH = 10;
 
+    /**
+     * Searches use a lot of CPU, so only this many run at the same time and the others wait in line. That keeps
+     * a burst of searches from starving the rest of the shop, but while slow searches hold every slot, each
+     * search waits behind them, however short its search word.
+     */
+    static final int MAX_CONCURRENT_SEARCHES = 3;
+
     public record SearchHit(Product product, int typos) {
     }
 
+    private final Semaphore searchSlots = new Semaphore(MAX_CONCURRENT_SEARCHES, true);
     private final ProductCatalog catalog;
     private final DemoSettings settings;
     private final EditDistance recursive;
@@ -53,8 +62,13 @@ public class ProductSearchService {
     }
 
     public List<SearchHit> search(String query) {
-        EditDistance editDistance = settings.problemEnabled(Scenario.SEARCH) ? recursive : iterative;
-        return search(query, editDistance);
+        searchSlots.acquireUninterruptibly();
+        try {
+            EditDistance editDistance = settings.problemEnabled(Scenario.SEARCH) ? recursive : iterative;
+            return search(query, editDistance);
+        } finally {
+            searchSlots.release();
+        }
     }
 
     List<SearchHit> search(String query, EditDistance editDistance) {

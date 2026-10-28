@@ -10,7 +10,7 @@ import java.util.Optional;
 public enum Scenario {
 
     SEARCH("search", "Product search", "CPU hotspot",
-            "Searches get slow and CPU climbs while the shop has spare threads.",
+            "At high load every search hangs for seconds, even a short one, and CPU climbs.",
             "Use high load and a Profiling recording. Automated Analysis: \"Method Profiling\" points at "
                     + "RecursiveEditDistance.distance. Dashboard: process CPU load rises.",
             "com/demo/shop/search/RecursiveEditDistance.java",

@@ -65,7 +65,7 @@ configured values. Set them in `src/main/resources/application.properties` or as
 | Property | Environment variable | Default | Meaning |
 |---|---|---|---|
 | `demo.search.problem-enabled` | `DEMO_SEARCH_PROBLEM_ENABLED` | `false` | Run the naive search |
-| `demo.search.load` | `DEMO_SEARCH_LOAD` | `medium` | `low`, `medium` or `high` (3, 10 or 32 searches/s) |
+| `demo.search.load` | `DEMO_SEARCH_LOAD` | `medium` | `low`, `medium` or `high` (2, 6 or 30 searches/s) |
 | `demo.pricing.problem-enabled` | `DEMO_PRICING_PROBLEM_ENABLED` | `false` | Run the leaking price cache |
 | `demo.pricing.load` | `DEMO_PRICING_LOAD` | `medium` | 5, 15 or 30 product page views/s |
 | `demo.checkout.problem-enabled` | `DEMO_CHECKOUT_PROBLEM_ENABLED` | `false` | Run the globally locked inventory |

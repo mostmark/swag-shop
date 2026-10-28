@@ -3,6 +3,11 @@ package com.demo.shop.search;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.IntStream;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -10,6 +15,8 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import com.demo.shop.catalog.ProductCatalog;
+import com.demo.shop.demo.DemoSettings;
+import com.demo.shop.demo.Scenario;
 
 class ProductSearchServiceTest {
 
@@ -48,6 +55,43 @@ class ProductSearchServiceTest {
     @Test
     void unknownWordsFindNothing() {
         assertEquals(List.of(), search.search("xylophone", iterative));
+    }
+
+    @Test
+    void runsAtMostThreeSearchesAtOnce() throws Exception {
+        AtomicInteger running = new AtomicInteger();
+        AtomicInteger maxRunning = new AtomicInteger();
+        IterativeEditDistance slowFixed = new IterativeEditDistance() {
+            @Override
+            public int distance(String a, String b) {
+                maxRunning.accumulateAndGet(running.incrementAndGet(), Math::max);
+                try {
+                    Thread.sleep(0, 200_000);
+                    return super.distance(a, b);
+                } catch (InterruptedException e) {
+                    throw new IllegalStateException(e);
+                } finally {
+                    running.decrementAndGet();
+                }
+            }
+        };
+        DemoSettings fixed = new DemoSettings() {
+            @Override
+            public boolean problemEnabled(Scenario scenario) {
+                return false;
+            }
+        };
+        ProductSearchService limited = new ProductSearchService(new ProductCatalog(), fixed, recursive, slowFixed);
+
+        try (ExecutorService shoppers = Executors.newFixedThreadPool(10)) {
+            List<Future<List<ProductSearchService.SearchHit>>> searches = IntStream.range(0, 10)
+                    .mapToObj(i -> shoppers.submit(() -> limited.search("xylophone")))
+                    .toList();
+            for (Future<List<ProductSearchService.SearchHit>> search : searches) {
+                assertEquals(List.of(), search.get());
+            }
+        }
+        assertEquals(ProductSearchService.MAX_CONCURRENT_SEARCHES, maxRunning.get());
     }
 
     private static List<String> ids(List<ProductSearchService.SearchHit> hits) {

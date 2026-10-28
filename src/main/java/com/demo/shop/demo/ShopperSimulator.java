@@ -41,7 +41,8 @@ public class ShopperSimulator {
 
     /** Requests per second at LOW, MEDIUM and HIGH load. */
     static final Map<Scenario, int[]> RATES = Map.of(
-            Scenario.SEARCH, new int[] { 3, 10, 32 },
+            // The naive search handles about 13 searches/s on a laptop: high load overloads it, medium does not
+            Scenario.SEARCH, new int[] { 2, 6, 30 },
             Scenario.PRICING, new int[] { 5, 15, 30 },
             Scenario.CHECKOUT, new int[] { 15, 40, 60 });
 
@@ -50,7 +51,8 @@ public class ShopperSimulator {
 
     private static final List<String> SEARCH_TERMS = List.of(
             "fedora", "red hat", "coffee mug", "hoody", "backpak", "water bottle", "stickers", "enamel pins",
-            "tshirt", "laptop bag", "zipper", "charcoal", "notebook", "ceramic cup", "cotton shirt", "travel");
+            "tshirt", "laptop bag", "zipper", "charcoal", "notebook", "ceramic cup", "cotton shirt", "travel",
+            "waterbottle", "insulated", "drinkware", "stainless steel");
 
     @Inject
     DemoSettings settings;
