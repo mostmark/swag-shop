@@ -30,7 +30,7 @@ public class ProductSearchService {
     static final int MAX_WORD_LENGTH = 10;
 
     /** Longer search terms are cut to this length; the shorter prefix still finds the right products. */
-    static final int MAX_TERM_LENGTH = 8;
+    static final int MAX_TERM_LENGTH = 10;
 
     public record SearchHit(Product product, int typos) {
     }

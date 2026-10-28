@@ -50,7 +50,7 @@ public class ShopperSimulator {
 
     private static final List<String> SEARCH_TERMS = List.of(
             "fedora", "red hat", "coffee mug", "hoody", "backpak", "water bottle", "stickers", "enamel pins",
-            "tshirt", "laptop bag", "zipper", "charcoal", "insulated", "ceramic cup", "cotton shirt", "travel");
+            "tshirt", "laptop bag", "zipper", "charcoal", "notebook", "ceramic cup", "cotton shirt", "travel");
 
     @Inject
     DemoSettings settings;
