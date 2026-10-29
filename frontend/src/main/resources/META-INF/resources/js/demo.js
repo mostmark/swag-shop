@@ -7,12 +7,10 @@ import '@rhds/elements/rh-disclosure/rh-disclosure.js';
 import { api, escapeHtml } from './shop.js';
 
 const POLL_MS = 2000;
-const HISTORY = 90;
 
 const scenariosEl = document.getElementById('scenarios');
 const trafficSwitch = document.getElementById('traffic');
 const dialog = document.getElementById('code-dialog');
-const history = { heap: [], cpu: [], threads: [] };
 // Scenarios whose Cryostat hint is unfolded; a card is redrawn when it changes and must keep it unfolded
 const openHints = new Set();
 let state;
@@ -46,6 +44,7 @@ function scenarioCard(s) {
         <div><div class="metric-value" data-metric="rps">–</div><div class="metric-label">requests/s</div></div>
         <div><div class="metric-value" data-metric="avg">–</div><div class="metric-label">average</div></div>
         <div><div class="metric-value" data-metric="p95">–</div><div class="metric-label">95th percentile</div></div>
+        <div class="jvm-line" data-metric="jvm" data-service="${escapeHtml(s.jvmService)}">${jvmLine(s.jvmService, null)}</div>
       </div>
       <div class="symptom">
         ${s.id === 'pricing' ? '<div class="muted" data-metric="leak"></div>' : ''}
@@ -123,24 +122,24 @@ document.getElementById('reset').addEventListener('click', async () => {
 
 // ---------- Live statistics ----------
 
-function sparkline(svg, values, max, limit) {
-  if (values.length < 2) {
-    return;
-  }
-  const top = Math.max(max, ...values) || 1;
-  const x = i => (i / (HISTORY - 1)) * 100;
-  const y = value => 38 - (value / top) * 36;
-  const offset = HISTORY - values.length;
-  const path = values.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i + offset).toFixed(2)},${y(v).toFixed(2)}`).join(' ');
-  const limitLine = limit ? `<path class="limit" d="M0,${y(limit).toFixed(2)} L100,${y(limit).toFixed(2)}"></path>` : '';
-  svg.innerHTML = `${limitLine}<path d="${path}"></path>`;
-}
+// Values that point at the problem: busy CPUs (the search hotspot) and a heap that stays full (the leak). CPU is
+// counted in cores, so it reads the same on a laptop with many cores and in a pod limited to a few.
+const BUSY_CORES = 1.5;
+const FULL_HEAP = 0.6;
 
-function push(series, value) {
-  series.push(value);
-  if (series.length > HISTORY) {
-    series.shift();
+/** One line about the JVM of the service that the card's shoppers call. */
+function jvmLine(service, jvm) {
+  const name = `<span><strong>${escapeHtml(service)}</strong> JVM</span>`;
+  if (!jvm) {
+    return `${name} · –`;
   }
+  const cores = jvm.processCpuLoad * jvm.availableProcessors;
+  const cpu = `CPU ${cores.toFixed(1)} of ${jvm.availableProcessors} cores`;
+  const heap = `heap ${jvm.heapUsedMb} of ${jvm.heapMaxMb} MB`;
+  // Each part is kept on one line; the line breaks only between parts
+  const part = (text, bad = false) => `<span${bad ? ' class="bad"' : ''}>${text}</span>`;
+  return [name, part(cpu, cores >= BUSY_CORES), part(heap, jvm.heapUsedMb > jvm.heapMaxMb * FULL_HEAP),
+    part(`${jvm.liveThreads} threads`)].join(' · ');
 }
 
 function formatMs(ms) {
@@ -153,26 +152,15 @@ function formatMs(ms) {
 async function poll() {
   try {
     const { body: stats } = await api('/api/demo/stats');
-    const { jvm } = stats;
-    push(history.heap, jvm.heapUsedMb);
-    push(history.cpu, jvm.processCpuLoad * 100);
-    push(history.threads, jvm.liveThreads);
-
-    document.getElementById('heap').innerHTML = `${jvm.heapUsedMb} MB <small>of ${jvm.heapMaxMb} MB</small>`;
-    document.getElementById('cpu').innerHTML =
-      `${Math.round(jvm.processCpuLoad * 100)}% <small>of ${jvm.availableProcessors} CPU${jvm.availableProcessors > 1 ? 's' : ''}</small>`;
-    document.getElementById('threads').textContent = jvm.liveThreads;
-    document.getElementById('orders').textContent = stats.ordersPlaced.toLocaleString('en-US');
-    document.getElementById('gc').textContent =
-      `${jvm.gcCount.toLocaleString('en-US')} GCs · ${(jvm.gcTimeMs / 1000).toFixed(1)} s in GC`;
-    sparkline(document.getElementById('heap-chart'), history.heap, jvm.heapMaxMb, jvm.heapMaxMb);
-    sparkline(document.getElementById('cpu-chart'), history.cpu, 100);
-    sparkline(document.getElementById('threads-chart'), history.threads, 0);
-
-    if (stats.trafficEnabled !== trafficSwitch.checked) {
+    // Each part is null while its service does not answer
+    document.getElementById('orders').textContent = stats.ordersPlaced?.toLocaleString('en-US') ?? '–';
+    for (const line of scenariosEl.querySelectorAll('[data-metric="jvm"]')) {
+      line.innerHTML = jvmLine(line.dataset.service, stats.jvm[line.closest('.scenario').dataset.id]);
+    }
+    if (typeof stats.trafficEnabled === 'boolean' && stats.trafficEnabled !== trafficSwitch.checked) {
       trafficSwitch.checked = stats.trafficEnabled;
     }
-    for (const [id, summary] of Object.entries(stats.requests)) {
+    for (const [id, summary] of Object.entries(stats.requests ?? {})) {
       const card = scenariosEl.querySelector(`[data-id="${id}"]`);
       if (!card) {
         continue;
@@ -186,7 +174,7 @@ async function poll() {
       p95.classList.toggle('bad', summary.p95Millis > 250);
     }
     const leak = scenariosEl.querySelector('[data-metric="leak"]');
-    if (leak) {
+    if (leak && stats.priceCache) {
       const { entries, maxEntries, estimatedMb } = stats.priceCache;
       leak.textContent = entries === 0
         ? 'No leaked price quotes on the heap.'
@@ -194,7 +182,7 @@ async function poll() {
           + (entries >= maxEntries ? ' (safety limit reached, the leak has stopped growing)' : '');
     }
   } catch {
-    // the shop restarted or is busy; try again on the next tick
+    // the frontend restarted or is busy; try again on the next tick
   } finally {
     setTimeout(poll, POLL_MS);
   }

@@ -8,6 +8,7 @@
     </parent>
     <artifactId>swag-shop-frontend</artifactId>
     <packaging>quarkus</packaging>
+    <description>The shop's web pages and the API they call, which passes each request on to the services</description>
 
     <properties>
         <fontsource.version>5.3.0</fontsource.version>
@@ -87,6 +88,10 @@
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-rest-client-jackson</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
             <artifactId>quarkus-jfr</artifactId>
         </dependency>
         <dependency>
@@ -159,28 +164,10 @@
     </repositories>
 
     <build>
-        <resources>
-            <resource>
-                <directory>src/main/resources</directory>
-            </resource>
-            <!-- The demo control page shows the naive and fixed code of each scenario -->
-            <resource>
-                <directory>src/main/java</directory>
-                <targetPath>shop-source</targetPath>
-                <includes>
-                    <include>com/demo/shop/search/*EditDistance.java</include>
-                    <include>com/demo/shop/pricing/*QuoteCache.java</include>
-                    <include>com/demo/shop/inventory/*Inventory.java</include>
-                </includes>
-            </resource>
-        </resources>
         <plugins>
             <plugin>
                 <groupId>${quarkus.platform.group-id}</groupId>
                 <artifactId>quarkus-maven-plugin</artifactId>
-            </plugin>
-            <plugin>
-                <artifactId>maven-failsafe-plugin</artifactId>
             </plugin>
         </plugins>
     </build>

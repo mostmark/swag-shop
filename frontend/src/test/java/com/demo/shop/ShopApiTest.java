@@ -3,43 +3,46 @@ package com.demo.shop;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.startsWith;
+import static org.hamcrest.Matchers.nullValue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
 
-/** End-to-end tests of the shop and demo control REST API. Also run against the packaged app by ShopApiIT. */
+/** Tests of what the frontend does with the services' answers, against fake services. */
 @QuarkusTest
+@QuarkusTestResource(FakeServices.class)
 class ShopApiTest {
 
     @AfterEach
-    void resetDemo() {
-        given().post("/api/demo/reset").then().statusCode(200);
+    void resetFakes() {
+        FakeServices.reset();
     }
 
     @Test
     void listsTheCatalog() {
         given().get("/api/products")
                 .then().statusCode(200)
-                .body("$", hasSize(8))
-                .body("id", hasItem("red-fedora"));
+                .body("$", hasSize(1))
+                .body("[0].id", is("red-fedora"));
     }
 
     @Test
-    void showsProductDetailsWithPriceHistory() {
-        given().get("/api/products/red-fedora")
+    void combinesProductPriceAndStock() {
+        given().header("X-Request-Id", "request-1").get("/api/products/red-fedora")
                 .then().statusCode(200)
                 .body("product.name", is("Classic Red Fedora"))
                 .body("price", is(49.0f))
-                .body("priceHistory", hasSize(90))
-                .body("inStock", greaterThan(0));
+                .body("lowestLast30Days", is(39.2f))
+                .body("inStock", is(497))
+                .body("priceHistory", hasSize(2));
+        assertEquals("request-1", FakeServices.LAST_REQUEST.get("pricing X-Request-Id"));
     }
 
     @Test
@@ -48,109 +51,95 @@ class ShopApiTest {
     }
 
     @Test
-    void searchToleratesTypos() {
+    void passesSearchesOn() {
         given().queryParam("q", "backpak").get("/api/search")
                 .then().statusCode(200)
-                .body("count", is(1))
-                .body("products[0].id", is("laptop-backpack"));
+                .body("query", is("backpak"))
+                .body("count", is(1));
     }
 
     @Test
-    void placesAnOrder() {
-        given().contentType(ContentType.JSON)
-                .body("""
-                        {"items":[{"productId":"red-fedora","quantity":2},{"productId":"sticker-pack","quantity":1}]}""")
-                .post("/api/checkout")
-                .then().statusCode(200)
-                .body("orderId", startsWith("SW-"))
-                .body("total", is(106.0f))
-                .body("items", hasSize(2));
-    }
+    void passesOrdersOnWithTheirErrors() {
+        String order = "{\"items\":[{\"productId\":\"red-fedora\",\"quantity\":1}]}";
+        given().contentType(ContentType.JSON).body(order).post("/api/checkout")
+                .then().statusCode(200).body("orderId", is("SW-12345678"));
+        assertEquals(order, FakeServices.LAST_REQUEST.get("order POST /api/checkout"));
 
-    @Test
-    void rejectsInvalidOrders() {
-        given().contentType(ContentType.JSON).body("{\"items\":[]}").post("/api/checkout")
-                .then().statusCode(400);
         given().contentType(ContentType.JSON).body("{\"items\":[{\"productId\":\"unicorn\",\"quantity\":1}]}")
                 .post("/api/checkout")
-                .then().statusCode(400);
-        given().contentType(ContentType.JSON).body("{\"items\":[{\"productId\":\"red-fedora\",\"quantity\":99}]}")
-                .post("/api/checkout")
-                .then().statusCode(400);
+                .then().statusCode(400).body(is("Unknown product unicorn"));
     }
 
     @Test
-    void switchesScenariosAndResetsToDefaults() {
+    void combinesTheScenariosWithTheirLoad() {
         given().get("/api/demo/settings")
                 .then().statusCode(200)
+                .body("trafficEnabled", is(false))
                 .body("scenarios", hasSize(3))
-                .body("scenarios.find { it.id == 'search' }.problemEnabled", is(false));
+                .body("scenarios.id", equalTo(java.util.List.of("search", "pricing", "checkout")))
+                .body("scenarios[0].feature", is("Feature search"))
+                .body("scenarios[0].load", is("MEDIUM"))
+                .body("scenarios[0].requestsPerSecond.HIGH", is(30))
+                .body("scenarios[0].jvmService", is("search"))
+                .body("scenarios[2].jvmService", is("order"));
+    }
 
+    @Test
+    void passesScenarioChangesOnToTheRightServices() {
         given().contentType(ContentType.JSON).body("{\"problemEnabled\":true,\"load\":\"HIGH\"}")
-                .put("/api/demo/scenarios/search")
+                .put("/api/demo/scenarios/checkout")
                 .then().statusCode(200)
+                .body("id", is("checkout"))
                 .body("problemEnabled", is(true))
                 .body("load", is("HIGH"));
-
-        given().contentType(ContentType.JSON).body("{\"enabled\":true}").put("/api/demo/traffic")
-                .then().statusCode(200).body("trafficEnabled", is(true));
+        assertEquals(true, FakeServices.PROBLEM_ENABLED.get("checkout"));
+        assertEquals("{\"problemEnabled\":true,\"changedBy\":\"demo control page\"}",
+                FakeServices.LAST_REQUEST.get("inventory PUT /api/demo/scenario"));
 
         given().post("/api/demo/reset")
                 .then().statusCode(200)
-                .body("trafficEnabled", is(false))
-                .body("scenarios.find { it.id == 'search' }.problemEnabled", is(false))
-                .body("scenarios.find { it.id == 'search' }.load", is("MEDIUM"));
+                .body("scenarios.find { it.id == 'checkout' }.problemEnabled", is(false))
+                .body("scenarios.find { it.id == 'checkout' }.load", is("MEDIUM"));
+        given().contentType(ContentType.JSON).body("{\"problemEnabled\":true}").put("/api/demo/scenarios/unknown")
+                .then().statusCode(404);
     }
 
     @Test
-    void naiveSearchFindsTheSameProducts() {
-        given().contentType(ContentType.JSON).body("{\"problemEnabled\":true}").put("/api/demo/scenarios/search")
-                .then().statusCode(200);
-        given().queryParam("q", "hoody").get("/api/search")
-                .then().statusCode(200)
-                .body("products[0].id", is("charcoal-zip-hoodie"));
+    void switchesTheShoppers() {
+        given().contentType(ContentType.JSON).body("{\"enabled\":true}").put("/api/demo/traffic")
+                .then().statusCode(200).body("trafficEnabled", is(true));
     }
 
     @Test
-    void leakingPriceCacheGrowsAndIsClearedByTheFix() {
-        given().contentType(ContentType.JSON).body("{\"problemEnabled\":true}").put("/api/demo/scenarios/pricing")
-                .then().statusCode(200);
-        for (int i = 0; i < 20; i++) {
-            given().get("/api/products/red-water-bottle").then().statusCode(200);
-        }
-        given().get("/api/demo/stats").then().statusCode(200).body("priceCache.entries", is(20));
-
-        given().contentType(ContentType.JSON).body("{\"problemEnabled\":false}").put("/api/demo/scenarios/pricing")
-                .then().statusCode(200);
-        given().get("/api/demo/stats").then().statusCode(200).body("priceCache.entries", is(0));
-    }
-
-    @Test
-    void naiveCheckoutStillPlacesOrders() {
-        given().contentType(ContentType.JSON).body("{\"problemEnabled\":true}").put("/api/demo/scenarios/checkout")
-                .then().statusCode(200);
-        given().contentType(ContentType.JSON).body("{\"items\":[{\"productId\":\"red-t-shirt\",\"quantity\":1}]}")
-                .post("/api/checkout")
-                .then().statusCode(200)
-                .body("total", is(24.0f));
-    }
-
-    @Test
-    void reportsStatistics() {
-        given().get("/api/products/red-fedora").then().statusCode(200);
+    void collectsTheStatisticsOfEveryService() {
         given().get("/api/demo/stats")
                 .then().statusCode(200)
-                .body("jvm.heapMaxMb", greaterThan(0))
-                .body("requests.pricing.total", greaterThan(0));
+                .body("trafficEnabled", is(true))
+                .body("requests.search.total", is(60))
+                .body("jvm.search.service", is("swag-shop-search"))
+                .body("jvm.pricing.service", is("swag-shop-pricing"))
+                .body("jvm.checkout.service", is("swag-shop-order"))
+                .body("priceCache.entries", is(20))
+                .body("ordersPlaced", is(42));
     }
 
     @Test
-    void servesTheNaiveAndFixedSourceCode() {
+    void statisticsLeaveOutAServiceThatIsDown() {
+        FakeServices.BROKEN.put("pricing", true);
+        given().get("/api/demo/stats")
+                .then().statusCode(200)
+                .body("jvm.pricing", nullValue())
+                .body("priceCache", nullValue())
+                .body("jvm.search.service", is("swag-shop-search"))
+                .body("ordersPlaced", is(42));
+    }
+
+    @Test
+    void servesTheSourceCodeOfTheScenarioService() {
         given().get("/api/demo/source/checkout")
                 .then().statusCode(200)
-                .body("problem.className", is("SynchronizedInventory"))
-                .body("problem.code", containsString("public synchronized Reservation reserve"))
-                .body("fix.className", is("PerProductLockInventory"));
+                .body("scenario", is("checkout"))
+                .body("problem.className", is("Naive"));
         given().get("/api/demo/source/unknown").then().statusCode(404);
     }
 

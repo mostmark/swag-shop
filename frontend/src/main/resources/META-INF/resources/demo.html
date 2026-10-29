@@ -30,7 +30,8 @@
       <div>
         <h1>Demo control</h1>
         <p class="lede">Switch each shop feature between its naive code (the problem) and the fixed code, then find the
-          problem with JDK Flight Recorder in JDK Mission Control or Cryostat.</p>
+          problem with JDK Flight Recorder in JDK Mission Control or Cryostat. Each feature is a service with a JVM of
+          its own.</p>
       </div>
       <img src="/img/brand/illustration-monitoring.svg" alt="" aria-hidden="true">
     </div>
@@ -38,33 +39,12 @@
     <div class="global-controls">
       <rh-switch id="traffic" accessible-label="Simulated shoppers" message-on="Simulated shoppers are sending traffic"
                  message-off="Simulated shoppers are paused"></rh-switch>
+      <span class="orders-placed"><span id="orders">–</span> orders placed</span>
       <span class="spacer"></span>
       <span class="defaults" id="traffic-default"></span>
       <rh-button id="reset" variant="secondary" icon="undo" icon-set="ui">Reset to defaults</rh-button>
     </div>
 
-    <section class="stats-row" aria-label="JVM statistics">
-      <div class="stat-tile">
-        <div class="stat-label">Heap used</div>
-        <div class="stat-value" id="heap">–</div>
-        <svg class="sparkline" id="heap-chart" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true"></svg>
-      </div>
-      <div class="stat-tile">
-        <div class="stat-label">Process CPU</div>
-        <div class="stat-value" id="cpu">–</div>
-        <svg class="sparkline" id="cpu-chart" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true"></svg>
-      </div>
-      <div class="stat-tile">
-        <div class="stat-label">Live threads</div>
-        <div class="stat-value" id="threads">–</div>
-        <svg class="sparkline" id="threads-chart" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true"></svg>
-      </div>
-      <div class="stat-tile">
-        <div class="stat-label">Orders placed</div>
-        <div class="stat-value" id="orders">–</div>
-        <div class="stat-label" id="gc"></div>
-      </div>
-    </section>
 
     <section class="scenario-grid" id="scenarios" aria-label="Scenarios"></section>
   </main>

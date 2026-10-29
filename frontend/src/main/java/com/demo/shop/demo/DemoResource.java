@@ -1,12 +1,6 @@
 package com.demo.shop.demo;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.lang.management.GarbageCollectorMXBean;
-import java.lang.management.ManagementFactory;
-import java.lang.management.MemoryUsage;
-import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
+import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,155 +13,171 @@ import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 
-import com.demo.shop.checkout.CheckoutService;
-import com.demo.shop.pricing.PriceService;
-import com.demo.shop.pricing.RequestQuoteCache;
+import org.eclipse.microprofile.rest.client.inject.RestClient;
 
-/** Backend of the demo control page. */
+import com.demo.shop.clients.InventoryClient;
+import com.demo.shop.clients.JvmClient;
+import com.demo.shop.clients.LoadGeneratorClient;
+import com.demo.shop.clients.LoadGeneratorClient.LoadState;
+import com.demo.shop.clients.LoadGeneratorClient.ScenarioLoad;
+import com.demo.shop.clients.OrderClient;
+import com.demo.shop.clients.PricingClient;
+import com.demo.shop.clients.ScenarioServiceClient;
+import com.demo.shop.clients.ScenarioServiceClient.ScenarioInfo;
+import com.demo.shop.clients.ScenarioServiceClient.ScenarioUpdate;
+import com.demo.shop.clients.SearchClient;
+import com.fasterxml.jackson.databind.JsonNode;
+
+import io.smallrye.mutiny.Uni;
+
+/**
+ * Backend of the demo control page. Each scenario card combines two services: the one with the problem switch
+ * and the load generator with the load level and response times. The page's actions are passed on to them.
+ */
 @Path("/api/demo")
 public class DemoResource {
 
     private static final String CHANGED_BY_UI = "demo control page";
 
+    /** The statistics are polled every 2 seconds; a service that is slower to answer is shown as unavailable. */
+    static final Duration STATS_TIMEOUT = Duration.ofMillis(1500);
+
+    /**
+     * jvmService is the service whose JVM the card shows: the one shoppers call. For checkout that is the order
+     * service, while the problem switch is in inventory.
+     */
     public record ScenarioView(String id, String feature, String problemType, String symptom, String cryostatHint,
-            boolean problemEnabled, LoadLevel load, boolean defaultProblemEnabled, LoadLevel defaultLoad,
-            Map<LoadLevel, Integer> requestsPerSecond) {
+            boolean problemEnabled, String load, boolean defaultProblemEnabled, String defaultLoad,
+            Map<String, Integer> requestsPerSecond, String jvmService) {
     }
 
     public record DemoState(boolean trafficEnabled, boolean defaultTrafficEnabled, List<ScenarioView> scenarios) {
     }
 
-    public record ScenarioUpdate(Boolean problemEnabled, LoadLevel load) {
+    public record ScenarioChange(Boolean problemEnabled, String load) {
     }
 
-    public record TrafficUpdate(boolean enabled) {
+    public record TrafficChange(boolean enabled) {
     }
 
-    public record JvmStats(long heapUsedMb, long heapCommittedMb, long heapMaxMb, double processCpuLoad,
-            int availableProcessors, int liveThreads, long gcCount, long gcTimeMs, long uptimeSeconds) {
-    }
-
-    public record LeakStats(int entries, long maxEntries, long estimatedMb) {
-    }
-
-    public record Stats(JvmStats jvm, Map<String, RequestStats.Summary> requests, LeakStats priceCache,
-            long ordersPlaced, boolean trafficEnabled) {
-    }
-
-    public record SourceFile(String className, String path, String code) {
-    }
-
-    public record SourceView(String scenario, SourceFile problem, SourceFile fix) {
+    /** Every part is null while its service does not answer. */
+    public record Stats(Boolean trafficEnabled, JsonNode requests, Map<String, JsonNode> jvm, JsonNode priceCache,
+            Long ordersPlaced) {
     }
 
     @Inject
-    DemoSettings settings;
+    @RestClient
+    SearchClient search;
 
     @Inject
-    DemoConfig config;
+    @RestClient
+    PricingClient pricing;
 
     @Inject
-    RequestStats requestStats;
+    @RestClient
+    InventoryClient inventory;
 
     @Inject
-    PriceService priceService;
+    @RestClient
+    OrderClient order;
 
     @Inject
-    CheckoutService checkoutService;
+    @RestClient
+    LoadGeneratorClient loadGenerator;
 
     @GET
     @Path("/settings")
-    public DemoState state() {
-        List<ScenarioView> scenarios = Arrays.stream(Scenario.values()).map(this::view).toList();
-        return new DemoState(settings.trafficEnabled(), config.traffic().enabled(), scenarios);
+    public Uni<DemoState> state() {
+        return Uni.combine().all()
+                .unis(loadGenerator.state(), search.scenario(), pricing.scenario(), inventory.scenario())
+                .asTuple()
+                .map(all -> {
+                    LoadState load = all.getItem1();
+                    List<ScenarioView> scenarios = List.of(all.getItem2(), all.getItem3(), all.getItem4()).stream()
+                            .map(scenario -> view(scenario, load))
+                            .toList();
+                    return new DemoState(load.trafficEnabled(), load.defaultTrafficEnabled(), scenarios);
+                });
     }
 
     @PUT
     @Path("/scenarios/{id}")
-    public ScenarioView update(@PathParam("id") String id, ScenarioUpdate update) {
-        Scenario scenario = scenario(id);
-        settings.update(scenario, update.problemEnabled(), update.load(), CHANGED_BY_UI);
-        return view(scenario);
+    public Uni<ScenarioView> update(@PathParam("id") String id, ScenarioChange change) {
+        ScenarioServiceClient service = scenarioService(id);
+        Uni<?> problem = change.problemEnabled() == null ? Uni.createFrom().voidItem()
+                : service.updateScenario(new ScenarioUpdate(change.problemEnabled(), CHANGED_BY_UI));
+        Uni<?> load = change.load() == null ? Uni.createFrom().voidItem()
+                : loadGenerator.updateLoad(id, new LoadGeneratorClient.LoadUpdate(change.load()));
+        return Uni.combine().all().unis(problem, load).discardItems()
+                .chain(() -> Uni.combine().all().unis(service.scenario(), loadGenerator.state()).asTuple())
+                .map(both -> view(both.getItem1(), both.getItem2()));
     }
 
     @PUT
     @Path("/traffic")
-    public DemoState traffic(TrafficUpdate update) {
-        settings.setTrafficEnabled(update.enabled());
-        return state();
+    public Uni<DemoState> traffic(TrafficChange change) {
+        return loadGenerator.traffic(new LoadGeneratorClient.TrafficUpdate(change.enabled())).chain(this::state);
     }
 
     @POST
     @Path("/reset")
-    public DemoState reset() {
-        settings.reset(CHANGED_BY_UI);
-        return state();
+    public Uni<DemoState> reset() {
+        return Uni.combine().all()
+                .unis(loadGenerator.reset(), search.reset(CHANGED_BY_UI), pricing.reset(CHANGED_BY_UI),
+                        inventory.reset(CHANGED_BY_UI))
+                .discardItems()
+                .chain(this::state);
     }
 
     @GET
     @Path("/stats")
-    public Stats stats() {
-        Map<String, RequestStats.Summary> requests = new LinkedHashMap<>();
-        for (Scenario scenario : Scenario.values()) {
-            requests.put(scenario.id(), requestStats.summary(scenario));
-        }
-        RequestQuoteCache leakingCache = priceService.requestQuoteCache();
-        LeakStats leak = new LeakStats(leakingCache.size(), leakingCache.maxEntries(),
-                leakingCache.estimatedBytes() / (1024 * 1024));
-        return new Stats(jvmStats(), requests, leak, checkoutService.ordersPlaced(), settings.trafficEnabled());
+    public Uni<Stats> stats() {
+        return Uni.combine().all()
+                .unis(orNull(loadGenerator.stats()), orNull(search.jvm()), orNull(pricing.jvm()), orNull(order.jvm()),
+                        orNull(pricing.leak()), orNull(order.orders()))
+                .asTuple()
+                .map(all -> {
+                    JsonNode load = all.getItem1();
+                    Map<String, JsonNode> jvm = new LinkedHashMap<>();
+                    jvm.put("search", all.getItem2());
+                    jvm.put("pricing", all.getItem3());
+                    jvm.put("checkout", all.getItem4());
+                    JsonNode orders = all.getItem6();
+                    return new Stats(load == null ? null : load.path("trafficEnabled").asBoolean(),
+                            load == null ? null : load.path("requests"), jvm, all.getItem5(),
+                            orders == null ? null : orders.path("ordersPlaced").asLong());
+                });
     }
 
     @GET
     @Path("/source/{id}")
-    public SourceView source(@PathParam("id") String id) {
-        Scenario scenario = scenario(id);
-        return new SourceView(scenario.id(), sourceFile(scenario.problemSource()),
-                sourceFile(scenario.fixSource()));
+    public Uni<JsonNode> source(@PathParam("id") String id) {
+        return scenarioService(id).source();
     }
 
-    private ScenarioView view(Scenario scenario) {
-        DemoSettings.ScenarioState state = settings.state(scenario);
-        DemoConfig.ScenarioConfig defaults = config.scenario(scenario);
-        Map<LoadLevel, Integer> rates = new LinkedHashMap<>();
-        for (LoadLevel level : LoadLevel.values()) {
-            rates.put(level, ShopperSimulator.rate(scenario, level));
-        }
+    private ScenarioServiceClient scenarioService(String id) {
+        return switch (id) {
+            case "search" -> search;
+            case "pricing" -> pricing;
+            case "checkout" -> inventory;
+            default -> throw new NotFoundException("Unknown scenario " + id);
+        };
+    }
+
+    private static String jvmService(String id) {
+        return id.equals("checkout") ? "order" : id;
+    }
+
+    private static ScenarioView view(ScenarioInfo scenario, LoadState load) {
+        ScenarioLoad scenarioLoad = load.scenarios().stream().filter(s -> s.id().equals(scenario.id())).findFirst()
+                .orElseThrow(() -> new IllegalStateException("The load generator has no scenario " + scenario.id()));
         return new ScenarioView(scenario.id(), scenario.feature(), scenario.problemType(), scenario.symptom(),
-                scenario.cryostatHint(), state.problemEnabled(), state.load(), defaults.problemEnabled(),
-                defaults.load(), rates);
+                scenario.cryostatHint(), scenario.problemEnabled(), scenarioLoad.load(),
+                scenario.defaultProblemEnabled(), scenarioLoad.defaultLoad(), scenarioLoad.requestsPerSecond(),
+                jvmService(scenario.id()));
     }
 
-    private static Scenario scenario(String id) {
-        return Scenario.fromId(id).orElseThrow(() -> new NotFoundException("Unknown scenario " + id));
-    }
-
-    private static SourceFile sourceFile(String path) {
-        try (InputStream in = DemoResource.class.getClassLoader().getResourceAsStream("shop-source/" + path)) {
-            if (in == null) {
-                throw new NotFoundException("Source not packaged: " + path);
-            }
-            String className = path.substring(path.lastIndexOf('/') + 1, path.length() - ".java".length());
-            return new SourceFile(className, "src/main/java/" + path, new String(in.readAllBytes(),
-                    StandardCharsets.UTF_8));
-        } catch (IOException e) {
-            throw new IllegalStateException("Could not read " + path, e);
-        }
-    }
-
-    private static JvmStats jvmStats() {
-        MemoryUsage heap = ManagementFactory.getMemoryMXBean().getHeapMemoryUsage();
-        double cpu = ManagementFactory.getOperatingSystemMXBean() instanceof com.sun.management.OperatingSystemMXBean os
-                ? Math.max(0, os.getProcessCpuLoad())
-                : 0;
-        long gcCount = 0;
-        long gcTime = 0;
-        for (GarbageCollectorMXBean gc : ManagementFactory.getGarbageCollectorMXBeans()) {
-            gcCount += Math.max(0, gc.getCollectionCount());
-            gcTime += Math.max(0, gc.getCollectionTime());
-        }
-        long mb = 1024 * 1024;
-        return new JvmStats(heap.getUsed() / mb, heap.getCommitted() / mb, heap.getMax() / mb, cpu,
-                Runtime.getRuntime().availableProcessors(), ManagementFactory.getThreadMXBean().getThreadCount(),
-                gcCount, gcTime, ManagementFactory.getRuntimeMXBean().getUptime() / 1000);
+    private static <T> Uni<T> orNull(Uni<T> call) {
+        return call.ifNoItem().after(STATS_TIMEOUT).fail().onFailure().recoverWithNull();
     }
 }
