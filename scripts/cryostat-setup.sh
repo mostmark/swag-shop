@@ -22,28 +22,46 @@ CRYOSTAT="https://$HOST"
 TOKEN="$(oc whoami -t)"
 auth=(-H "Authorization: Bearer $TOKEN")
 
-existing="$(curl -sf "${auth[@]}" "$CRYOSTAT/api/v4/rules" | grep -c "\"name\":\"$RULE\"" || true)"
+# Calls the Cryostat API and prints the answer; on an HTTP error, prints Cryostat's answer and stops
+request() {
+  local body status
+  body="$(mktemp)"
+  status="$(curl -sS -o "$body" -w '%{http_code}' "${auth[@]}" "$@")"
+  if [[ "$status" != 2* ]]; then
+    echo "Cryostat answered HTTP $status:" >&2
+    cat "$body" >&2
+    echo >&2
+    rm -f "$body"
+    exit 1
+  fi
+  cat "$body"
+  rm -f "$body"
+}
+
+existing="$(request "$CRYOSTAT/api/v4/rules" | grep -c "\"name\":\"$RULE\"" || true)"
 if [ "$existing" != "0" ]; then
   echo "==> Removing the existing rule $RULE"
-  curl -sf "${auth[@]}" -X DELETE "$CRYOSTAT/api/v4/rules/$RULE?clean=true" >/dev/null
+  request -X DELETE "$CRYOSTAT/api/v4/rules/$RULE?clean=true" >/dev/null
 fi
 if [ "$DELETE" = true ]; then
   exit 0
 fi
 
 echo "==> Creating the automated rule $RULE in $CRYOSTAT"
-curl -sf "${auth[@]}" -H 'Content-Type: application/json' -X POST "$CRYOSTAT/api/v4/rules" -d @- <<'EOF'
+# The request follows Cryostat's API description (GET $CRYOSTAT/api): matchExpression is an object with the
+# script, and the labels are an object, although GET /api/v4/rules returns them as a string and a list
+request -H 'Content-Type: application/json' -X POST "$CRYOSTAT/api/v4/rules" -d @- <<'EOF'
 {
   "name": "swag_shop_continuous",
   "description": "Continuous JFR recording for every Swag Shop pod, analysed automatically",
-  "matchExpression": "target.alias.startsWith('swag-shop')",
+  "matchExpression": { "script": "target.alias.startsWith('swag-shop')" },
   "eventSpecifier": "template=Continuous,type=TARGET",
   "archivalPeriodSeconds": 0,
   "initialDelaySeconds": 0,
   "preservedArchives": 0,
   "maxAgeSeconds": 300,
   "maxSizeBytes": 0,
-  "metadata": { "labels": [ { "key": "autoanalyze", "value": "true" } ] },
+  "metadata": { "labels": { "autoanalyze": "true" } },
   "enabled": true
 }
 EOF
