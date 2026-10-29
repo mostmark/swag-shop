@@ -4,7 +4,7 @@ Two demos for a 40-minute introductory session:
 
 | Part | Time | Where | Story |
 |---|---|---|---|
-| Demo 1 | ~5 min | Laptop, JDK Mission Control | "JFR is built into the JVM: find a CPU hotspot and fix it" |
+| Demo 1 | ~5 min | Laptop: the search service, JDK Mission Control | "JFR is built into the JVM: find a CPU hotspot and fix it" |
 | Slides | | | "Now do that for pod 3 of 12 in OpenShift" → Cryostat |
 | Demo 2 | 12–15 min | OpenShift, Cryostat | Discovery, lock contention, a memory leak captured automatically, evidence that survives the pod |
 
@@ -16,19 +16,27 @@ Everything below was rehearsed against the lab cluster (Cryostat 4.2, Cryostat A
 
 ### Laptop (demo 1)
 
+Demo 1 uses only the search service, on its own: one JVM with its own copy of the product list, and a load
+script instead of the web shop.
+
 ```shell
-./mvnw package -DskipTests
-java -Xmx256m -jar target/quarkus-app/quarkus-run.jar
+./mvnw -pl search package -DskipTests
+java -Dquarkus.profile=standalone -jar search/target/quarkus-app/quarkus-run.jar
 ```
 
-- [ ] <http://localhost:8080/demo.html> shows **Simulated shoppers are sending traffic** and all three scenarios **Fixed**.
+- [ ] Terminal 1 (the service) shows **Loaded 8 products from the bundled products.json** and **Listening on:
+  http://0.0.0.0:8082**.
+- [ ] Terminal 2 (big font, the audience watches it): `java scripts/SearchLoad.java high` is running and prints a
+  line every second, with searches answered in a few milliseconds.
 - [ ] JDK Mission Control is open. Close old recordings.
-- [ ] A terminal in the project folder, with these commands ready to paste:
+- [ ] Terminal 3 in the project folder, with these commands ready to paste:
   ```shell
-  jcmd $(pgrep -f quarkus-run.jar) JFR.start name=demo settings=profile
-  jcmd $(pgrep -f quarkus-run.jar) JFR.dump name=demo filename=recordings/live-cpu.jfr
+  scripts/search-problem.sh on
+  jcmd $(pgrep -f search/target/quarkus-app) JFR.start name=demo settings=profile
+  jcmd $(pgrep -f search/target/quarkus-app) JFR.dump name=demo filename=recordings/live-cpu.jfr
+  scripts/search-problem.sh off
   ```
-- [ ] The IDE is open on `src/main/java/com/demo/shop/search/RecursiveEditDistance.java` and
+- [ ] The IDE is open on `search/src/main/java/com/demo/shop/search/RecursiveEditDistance.java` and
   `IterativeEditDistance.java`.
 
 ### Cluster (demo 2)
@@ -71,17 +79,18 @@ Check any recording without opening JMC: `scripts/jfr-rules.sh recordings/<file>
 
 | Time | Do | Say |
 |---|---|---|
-| 0:00 | Show the shop: the product grid, a search for `hoody` (typos welcome). | "A normal Quarkus web shop. Simulated shoppers are using it right now." |
-| 0:30 | Demo control: **Product search** → switch on, load **High**. Wait about 5 seconds, then search the shop for `hoodie` (any word works): the page hangs for 2–4 seconds and the timing turns red. | "Customers complain that search is slow. The CPU is busy, but where?" |
+| 0:00 | Terminal 2: the load script sends 30 searches a second, with typos (`hoody`, `backpak`) and long words (`waterbottle`). Each answer takes a few milliseconds. | "This is the search service of a web shop, a small Quarkus app. These are simulated shoppers using the search box." |
+| 0:30 | Terminal 3: `scripts/search-problem.sh on`. Within about 5 seconds the lines turn red: 2–4 seconds per search, and 40 searches waiting. | "Customers complain that search is slow. The CPU is busy, but where?" |
 | 1:00 | Paste the `JFR.start` command. | "JFR is part of the JVM. No agent, no restart: we just ask the running JVM to record. The overhead is around 1 %." |
-| 2:00 | Paste the `JFR.dump` command after about 60 seconds; open `recordings/live-cpu.jfr` in JMC. | |
+| 2:00 | Paste the `JFR.dump` command after about 60 seconds (at least 45: the rule below looks at 30-second windows); open `recordings/live-cpu.jfr` in JMC. | |
 | 2:15 | **Automated Analysis Results**: "Method Profiling" is red and names `RecursiveEditDistance.distance`. Open the **Method Profiling** page (or the flame graph) to show the deep recursion. | "JMC ran its analysis rules for us, and named the exact method." |
-| 3:00 | IDE: `RecursiveEditDistance`. The textbook recursion calls itself three times per character, so the work explodes: each extra letter in the search word makes it about 2.5 times slower. Long searches from other shoppers hold all three search slots (`ProductSearchService.MAX_CONCURRENT_SEARCHES`), so even a short search waits in line. Show `IterativeEditDistance`. | "Correct code, exponential cost. The fix is the dynamic programming version." |
-| 4:00 | Demo control: switch **Product search** off (fixed code). Search for `hoodie` again: a few milliseconds. | "In real life this is a new deployment; here a switch saves us the build." |
-| 4:30 | Bridge to the slides: | "Now imagine this is pod 3 of 12 in OpenShift. No JMC attached, no shell, and the evidence disappears when the pod restarts." |
+| 3:00 | IDE: `RecursiveEditDistance`. The textbook recursion calls itself three times per character, so the work explodes: each extra letter in the search word makes it about 2.5 times slower. Long searches hold all three search slots (`ProductSearchService.MAX_CONCURRENT_SEARCHES`), so even a short search waits in line. Show `IterativeEditDistance`. | "Correct code, exponential cost. The fix is the dynamic programming version." |
+| 4:00 | Terminal 3: `scripts/search-problem.sh off`. Within about 5 seconds the lines are back to milliseconds. | "In real life this is a new deployment; here a switch saves us the build." |
+| 4:30 | Bridge to the slides: | "Now imagine this is one of a dozen services in OpenShift, each with several pods. No JMC attached, no shell, and the evidence disappears when the pod restarts." |
 
-Also worth a mention: the recording contains the shop's own **Swag Shop › Demo › Problem Toggled** event, which shows
-exactly when the problem was switched on, and Quarkus adds an event for every REST request.
+Also worth a mention: the recording contains the service's own **Swag Shop › Demo › Problem Toggled** event, which
+shows exactly when the problem was switched on and by what (**Changed By**: `search-problem.sh`), and Quarkus adds an
+event for every REST request.
 
 ---
 
@@ -175,8 +184,8 @@ The smart trigger fires once per JVM, so delete the pod before rehearsing the me
 | The leak stops growing | By design: it stops at 70 % of the heap (`demo.safety.leak-max-heap-ratio`) so the pod never runs out of memory. Switch the scenario off and on to clear it. |
 | The shop page looks outdated after a redeploy | Reload the page. |
 | An order with the checkout problem on is not slow | Set the checkout load to **High** and wait a few seconds. At medium load the lock keeps up, and an order takes well under a second. |
-| A search with the problem on is not slow | Set the search load to **High** and wait a few seconds. Only high load sends more searches than the naive code can handle, so they queue for the three search slots; at medium load a short word such as `hoodie` still takes only about 30 ms. |
-| Cryostat analysis shows "Method Profiling" only as INFO | Use **High** search load; at medium load the hot method uses less than one CPU. Keep the pod's CPU limit at 4: with 2 cores the pod is throttled, JFR takes far fewer samples and the rule stays at INFO. |
+| A search with the problem on is not slow | Use high load (`java scripts/SearchLoad.java high`, or **High** on the demo control page) and wait a few seconds. Only high load sends more searches than the naive code can handle, so they queue for the three search slots; at medium load a short word such as `hoodie` still takes only about 30 ms. |
+| JMC or Cryostat analysis shows "Method Profiling" only as INFO | Use high search load; at medium load the hot method uses less than one CPU. The recording needs at least 45 seconds with the problem on: the rule looks at 30-second windows. Keep the pod's CPU limit at 4: with 2 cores the pod is throttled, JFR takes far fewer samples and the rule stays at INFO. |
 
 ---
 
