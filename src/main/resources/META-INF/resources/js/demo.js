@@ -3,6 +3,7 @@ import '@rhds/elements/rh-switch/rh-switch.js';
 import '@rhds/elements/rh-dialog/rh-dialog.js';
 import '@rhds/elements/rh-tabs/rh-tabs.js';
 import '@rhds/elements/rh-spinner/rh-spinner.js';
+import '@rhds/elements/rh-disclosure/rh-disclosure.js';
 import { api, escapeHtml } from './shop.js';
 
 const POLL_MS = 2000;
@@ -12,6 +13,8 @@ const scenariosEl = document.getElementById('scenarios');
 const trafficSwitch = document.getElementById('traffic');
 const dialog = document.getElementById('code-dialog');
 const history = { heap: [], cpu: [], threads: [] };
+// Scenarios whose Cryostat hint is unfolded; a card is redrawn when it changes and must keep it unfolded
+const openHints = new Set();
 let state;
 
 const LEVELS = ['LOW', 'MEDIUM', 'HIGH'];
@@ -46,7 +49,10 @@ function scenarioCard(s) {
       </div>
       ${s.id === 'pricing' ? '<div class="muted" data-metric="leak"></div>' : ''}
       <p class="muted">${escapeHtml(s.symptom)}</p>
-      <div class="hint"><strong>What to look for in Cryostat</strong>${escapeHtml(s.cryostatHint)}</div>
+      <rh-disclosure class="hint" variant="compact" summary="What to look for in Cryostat"
+                     ${openHints.has(s.id) ? 'open' : ''}>
+        <p>${escapeHtml(s.cryostatHint)}</p>
+      </rh-disclosure>
       <footer>
         <span class="defaults">Default: ${s.defaultProblemEnabled ? 'problem on' : 'fixed'} · ${levelName(s.defaultLoad)} load</span>
         <rh-button variant="secondary" class="view-code" icon="code" icon-set="ui">View code</rh-button>
@@ -88,6 +94,15 @@ scenariosEl.addEventListener('click', event => {
   }
   if (event.target.closest('.view-code')) {
     showCode(event.target.closest('.scenario').dataset.id);
+  }
+});
+
+scenariosEl.addEventListener('toggle', event => {
+  const hint = event.target.closest('rh-disclosure.hint');
+  if (hint) {
+    const id = hint.closest('.scenario').dataset.id;
+    // The event fires just before the disclosure updates its open property
+    queueMicrotask(() => (hint.open ? openHints.add(id) : openHints.delete(id)));
   }
 });
 

@@ -775,14 +775,12 @@ input:focus-visible {
 
 .hint {
   font-size: var(--rh-font-size-body-text-sm);
-  padding: var(--rh-space-md) var(--rh-space-lg);
-  border-left: 3px solid var(--rh-color-border-status-info, #0066cc);
-  background: var(--shop-panel);
 }
 
-.hint strong {
-  display: block;
-  margin-bottom: var(--rh-space-xs);
+/* The disclosure's own content area sets the body text size, so the text inside needs its size set directly */
+.hint p {
+  font-size: var(--rh-font-size-body-text-sm);
+  margin: 0;
 }
 
 .scenario footer {
