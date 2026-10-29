@@ -1,25 +1,32 @@
 #!/usr/bin/env bash
-# Deploys the Swag Shop image from quay.io to OpenShift. Build and push the image first with
+# Deploys the Swag Shop services from quay.io to OpenShift. Build and push the images first with
 # scripts/build-push-container.sh.
 #
 #   scripts/openshift-deploy.sh [namespace]      (default namespace: cryostat-demo1)
 #
 # The namespace must be one that Cryostat watches (the Cryostat resource's targetNamespaces), and you must be
-# logged in with oc. Set QUAY_USER to deploy quay.io/$QUAY_USER/swag-shop:latest instead of the image in
-# openshift/swag-shop.yaml.
+# logged in with oc. Set QUAY_USER to deploy the images from quay.io/$QUAY_USER instead of the ones in
+# openshift/*.yaml.
 set -euo pipefail
 
 NAMESPACE="${1:-cryostat-demo1}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SERVICES="catalog search pricing inventory order frontend load-generator"
 
 echo "==> Applying the OpenShift resources to $NAMESPACE"
-oc apply -n "$NAMESPACE" -f "$ROOT/openshift/swag-shop.yaml"
+oc apply -n "$NAMESPACE" -f "$ROOT/openshift/"
 if [[ -n "${QUAY_USER:-}" ]]; then
-  oc set image -n "$NAMESPACE" deployment/swag-shop "swag-shop=quay.io/$QUAY_USER/swag-shop:latest"
+  for service in $SERVICES; do
+    oc set image -n "$NAMESPACE" "deployment/swag-shop-$service" "$service=quay.io/$QUAY_USER/swag-shop-$service:latest"
+  done
 fi
 
-echo "==> Restarting the pod so it pulls the latest image"
-oc rollout restart deployment/swag-shop -n "$NAMESPACE"
-oc rollout status deployment/swag-shop -n "$NAMESPACE" --timeout=300s
+echo "==> Restarting the pods so they pull the latest images"
+for service in $SERVICES; do
+  oc rollout restart "deployment/swag-shop-$service" -n "$NAMESPACE"
+done
+for service in $SERVICES; do
+  oc rollout status "deployment/swag-shop-$service" -n "$NAMESPACE" --timeout=300s
+done
 
-echo "==> Swag Shop is running at https://$(oc get route swag-shop -n "$NAMESPACE" -o jsonpath='{.spec.host}')"
+echo "==> Swag Shop is running at https://$(oc get route swag-shop-frontend -n "$NAMESPACE" -o jsonpath='{.spec.host}')"

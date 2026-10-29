@@ -1,34 +1,40 @@
-# Swag Shop on OpenShift, monitored by Cryostat.
+# Swag Shop search service on OpenShift, monitored by Cryostat: typo-tolerant product search, with the CPU hotspot scenario
 #
-# Build and push the image with scripts/build-push-container.sh, then deploy with scripts/openshift-deploy.sh.
-# Every resource carries the label app.kubernetes.io/part-of=swag-shop-demo, so the whole demo can be removed with:
+# Build and push the images with scripts/build-push-container.sh, then deploy every service with
+# scripts/openshift-deploy.sh. Every resource carries the label app.kubernetes.io/part-of=swag-shop-demo, so the
+# whole demo can be removed with:
 #   oc delete all -l app.kubernetes.io/part-of=swag-shop-demo -n <namespace>
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: swag-shop
+  name: swag-shop-search
   labels:
-    app.kubernetes.io/name: swag-shop
+    app.kubernetes.io/name: swag-shop-search
+    app.kubernetes.io/component: search
     app.kubernetes.io/part-of: swag-shop-demo
     # Shows the Quarkus icon in the OpenShift topology view
     app.openshift.io/runtime: quarkus
+  annotations:
+    # Draws the calls between the services in the OpenShift topology view
+    app.openshift.io/connects-to: '[{"apiVersion":"apps/v1","kind":"Deployment","name":"swag-shop-catalog"}]'
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: swag-shop
+      app.kubernetes.io/name: swag-shop-search
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: swag-shop
+        app.kubernetes.io/name: swag-shop-search
+        app.kubernetes.io/component: search
         app.kubernetes.io/part-of: swag-shop-demo
         # The Cryostat Operator injects the Cryostat Agent into pods with these labels
         cryostat.io/name: cryostat-sample
         cryostat.io/namespace: cryostat
     spec:
       containers:
-        - name: swag-shop
-          image: quay.io/mostmark/swag-shop:latest
+        - name: search
+          image: quay.io/mostmark/swag-shop-search:latest
           # Always pull, so restarting the pod picks up a newly pushed :latest
           imagePullPolicy: Always
           ports:
@@ -36,32 +42,26 @@ spec:
               containerPort: 8080
               protocol: TCP
           env:
-            # A small heap makes the memory leak visible within a couple of minutes
             - name: JAVA_OPTS_APPEND
               value: >-
-                -Xms128m -Xmx384m
+                -Xmx256m
                 -Dquarkus.http.host=0.0.0.0
                 -Djava.util.logging.manager=org.jboss.logmanager.LogManager
-            # The image defaults to ParallelGC; use G1 (the JVM default) so the memory leak behaves as it does locally
+            # The image defaults to ParallelGC; use G1 (the JVM default), as when the services run locally
             - name: GC_CONTAINER_OPTIONS
-              value: -XX:+UseG1GC
-            # Smart trigger: when the heap stays more than 35 % full for 20 seconds (garbage alone never does that),
-            # the Agent starts a recording with the memory leak template by itself.
-            # (ProcessCpuLoad is not usable here: Cryostat Agent 0.7 reads it as 0.0 even when the CPU is busy.)
-            - name: CRYOSTAT_AGENT_SMART_TRIGGER_DEFINITIONS
-              value: '[HeapMemoryUsagePercent>0.35;TargetDuration>duration("20s")]~SwagShopMemoryLeak'
-            # Demo state at start-up; everything can be changed on the demo control page
-            - name: DEMO_TRAFFIC_ENABLED
-              value: "true"
+              value: '-XX:+UseG1GC'
+            # The products are fetched from the catalog at start-up
+            - name: CATALOG_URL
+              value: 'http://swag-shop-catalog:8080'
           resources:
             requests:
               cpu: 500m
-              memory: 512Mi
+              memory: 384Mi
             limits:
               # High search load needs about 3 cores. With a lower limit the pod is throttled and JFR's sampler
               # gets too few samples for the "Method Profiling" rule to turn red
               cpu: "4"
-              memory: 768Mi
+              memory: 512Mi
           readinessProbe:
             httpGet:
               path: /q/health/ready
@@ -81,31 +81,14 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: swag-shop
+  name: swag-shop-search
   labels:
-    app.kubernetes.io/name: swag-shop
+    app.kubernetes.io/name: swag-shop-search
     app.kubernetes.io/part-of: swag-shop-demo
 spec:
   selector:
-    app.kubernetes.io/name: swag-shop
+    app.kubernetes.io/name: swag-shop-search
   ports:
     - name: http
       port: 8080
       targetPort: http
----
-apiVersion: route.openshift.io/v1
-kind: Route
-metadata:
-  name: swag-shop
-  labels:
-    app.kubernetes.io/name: swag-shop
-    app.kubernetes.io/part-of: swag-shop-demo
-spec:
-  to:
-    kind: Service
-    name: swag-shop
-  port:
-    targetPort: http
-  tls:
-    termination: edge
-    insecureEdgeTerminationPolicy: Redirect
