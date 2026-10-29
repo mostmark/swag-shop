@@ -57,8 +57,9 @@ spec:
             - name: QUARKUS_REST_CLIENT_INVENTORY_URL
               value: 'http://swag-shop-inventory:8080'
           resources:
+            # The CPU request is kept small: it is what the scheduler reserves, not what the service may use
             requests:
-              cpu: 250m
+              cpu: 50m
               memory: 384Mi
             limits:
               cpu: "2"

@@ -60,8 +60,9 @@ spec:
             - name: LOAD_TRAFFIC_ENABLED
               value: 'true'
           resources:
+            # The CPU request is kept small: it is what the scheduler reserves, not what the service may use
             requests:
-              cpu: 250m
+              cpu: 50m
               memory: 256Mi
             limits:
               cpu: "1"

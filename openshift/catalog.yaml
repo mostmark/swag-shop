@@ -48,8 +48,9 @@ spec:
             - name: GC_CONTAINER_OPTIONS
               value: '-XX:+UseG1GC'
           resources:
+            # The CPU request is kept small: it is what the scheduler reserves, not what the service may use
             requests:
-              cpu: 100m
+              cpu: 50m
               memory: 192Mi
             limits:
               cpu: "1"

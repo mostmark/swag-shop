@@ -60,5 +60,5 @@ for service in $SERVICES; do
 done
 echo ""
 echo "Deploy them to OpenShift with:"
-echo "  scripts/openshift-deploy.sh cryostat-demo1"
+echo "  scripts/openshift-deploy.sh cryostat-demo2"
 echo "=============================================="

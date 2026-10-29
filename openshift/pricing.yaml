@@ -60,8 +60,9 @@ spec:
             - name: CRYOSTAT_AGENT_SMART_TRIGGER_DEFINITIONS
               value: '[HeapMemoryUsagePercent>0.35;TargetDuration>duration("20s")]~SwagShopMemoryLeak'
           resources:
+            # The CPU request is kept small: it is what the scheduler reserves, not what the service may use
             requests:
-              cpu: 250m
+              cpu: 50m
               memory: 512Mi
             limits:
               cpu: "2"

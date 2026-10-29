@@ -64,8 +64,9 @@ spec:
             - name: QUARKUS_REST_CLIENT_LOAD_GENERATOR_URL
               value: 'http://swag-shop-load-generator:8080'
           resources:
+            # The CPU request is kept small: it is what the scheduler reserves, not what the service may use
             requests:
-              cpu: 250m
+              cpu: 50m
               memory: 256Mi
             limits:
               cpu: "2"
