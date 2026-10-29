@@ -7,7 +7,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-SERVICES="pricing inventory order"
+SERVICES="pricing inventory order load-generator"
 status=0
 
 compare() {

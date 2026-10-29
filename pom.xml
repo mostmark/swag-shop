@@ -15,6 +15,7 @@
         <module>pricing</module>
         <module>inventory</module>
         <module>order</module>
+        <module>load-generator</module>
     </modules>
 
     <properties>
