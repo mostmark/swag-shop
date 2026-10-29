@@ -47,8 +47,10 @@ function scenarioCard(s) {
         <div><div class="metric-value" data-metric="avg">–</div><div class="metric-label">average</div></div>
         <div><div class="metric-value" data-metric="p95">–</div><div class="metric-label">95th percentile</div></div>
       </div>
-      ${s.id === 'pricing' ? '<div class="muted" data-metric="leak"></div>' : ''}
-      <p class="muted">${escapeHtml(s.symptom)}</p>
+      <div class="symptom">
+        ${s.id === 'pricing' ? '<div class="muted" data-metric="leak"></div>' : ''}
+        <p class="muted">${escapeHtml(s.symptom)}</p>
+      </div>
       <rh-disclosure class="hint" variant="compact" summary="What to look for in Cryostat"
                      ${openHints.has(s.id) ? 'open' : ''}>
         <p>${escapeHtml(s.cryostatHint)}</p>

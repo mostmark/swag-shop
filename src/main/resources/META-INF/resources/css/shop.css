@@ -669,9 +669,11 @@ input:focus-visible {
 }
 
 .scenario {
-  display: flex;
-  flex-direction: column;
-  gap: var(--rh-space-lg);
+  /* The cards share the grid's rows, so each part (and the Cryostat hint) starts at the same height in every card */
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: span 7;
+  row-gap: var(--rh-space-lg);
   padding: var(--rh-space-xl);
   border: 1px solid var(--shop-border);
   border-top: 4px solid var(--shop-fixed);
@@ -774,6 +776,7 @@ input:focus-visible {
 }
 
 .hint {
+  align-self: start;
   font-size: var(--rh-font-size-body-text-sm);
 }
 
@@ -783,8 +786,18 @@ input:focus-visible {
   margin: 0;
 }
 
+.symptom {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rh-space-lg);
+}
+
+.symptom p {
+  margin: 0;
+}
+
 .scenario footer {
-  margin-top: auto;
+  align-self: end;
   display: flex;
   justify-content: space-between;
   align-items: center;
