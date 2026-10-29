@@ -69,7 +69,7 @@ configured values. Set them in `src/main/resources/application.properties` or as
 | `demo.pricing.problem-enabled` | `DEMO_PRICING_PROBLEM_ENABLED` | `false` | Run the leaking price cache |
 | `demo.pricing.load` | `DEMO_PRICING_LOAD` | `medium` | 5, 15 or 30 product page views/s |
 | `demo.checkout.problem-enabled` | `DEMO_CHECKOUT_PROBLEM_ENABLED` | `false` | Run the globally locked inventory |
-| `demo.checkout.load` | `DEMO_CHECKOUT_LOAD` | `medium` | 15, 40 or 60 checkouts/s |
+| `demo.checkout.load` | `DEMO_CHECKOUT_LOAD` | `medium` | 3, 8 or 30 checkouts/s |
 | `demo.traffic.enabled` | `DEMO_TRAFFIC_ENABLED` | `true` (`false` in dev and test) | Start the simulated shoppers |
 | `demo.safety.leak-max-heap-ratio` | `DEMO_SAFETY_LEAK_MAX_HEAP_RATIO` | `0.7` | The leak stops growing at this fraction of the maximum heap, so the demo never runs out of memory |
 

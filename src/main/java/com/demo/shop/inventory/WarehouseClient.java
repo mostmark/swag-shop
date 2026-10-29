@@ -11,7 +11,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 @ApplicationScoped
 public class WarehouseClient {
 
-    static final Duration RESPONSE_TIME = Duration.ofMillis(20);
+    static final Duration RESPONSE_TIME = Duration.ofMillis(60);
 
     public void confirmReservation(String productId, int quantity) {
         try {

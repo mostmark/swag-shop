@@ -99,11 +99,11 @@ exactly when the problem was switched on, and Quarkus adds an event for every RE
 
 | Do | Say |
 |---|---|
-| Demo control: **Checkout** → switch on, load **High**. In the shop, place an order: it takes about a second. | "Checkout is slow." |
-| Dashboard: CPU stays flat. Demo control shows checkout latency around 0.9 s while CPU is low. | "But nothing is busy. Metrics cannot tell us why." |
+| Demo control: **Checkout** → switch on, load **High**. Wait about 5 seconds, then place an order in the shop: it hangs for about 2.5 seconds. | "Checkout is slow." |
+| Dashboard: CPU stays flat. Demo control shows checkout latency around 2.5 s while CPU is low. | "But nothing is busy. Metrics cannot tell us why." |
 | After about 60 seconds: **Recordings** → the continuous recording → **Automated Analysis**. "Java Blocking" is red, with threads blocked for minutes on the `SynchronizedInventory` monitor. | "Threads are waiting for one lock." |
 | Demo control → Checkout → **View code**: `public synchronized Reservation reserve`, with the slow warehouse call inside the lock. The **Fix** tab: per-product locks, slow call outside. | |
-| Switch **Checkout** off. Latency drops to about 25 ms. | |
+| Switch **Checkout** off. Latency drops to about 65 ms (one warehouse call). | |
 
 ### 3. A memory leak, captured automatically (~5 min)
 
@@ -148,6 +148,11 @@ and open its Automated Analysis: "Method Profiling" names `RecursiveEditDistance
   runs at most three at once and queues the rest, which protects checkout and product pages. With the naive code at
   high load, slow searches from other shoppers keep all three slots busy, and every search waits in line behind
   them. JFR records the waiting as thread park events in `Semaphore.acquire`.
+- **Why does every order wait, not just some?** Checkout works the same way: at most eight orders are processed
+  at once, first come, first served. With the global lock, those eight crawl through the 60 ms warehouse call one
+  at a time, so every new order waits in line for about 2.5 seconds. Without that limit, waiting for a
+  `synchronized` lock is luck: Java does not hand it over in arrival order, so half the orders would finish at
+  once and the other half would wait twice as long.
 - **What is the overhead?** The Continuous template is designed for production (around 1 %). Profiling and
   memory-leak recordings cost more and are meant for minutes, not days.
 
@@ -169,6 +174,7 @@ The smart trigger fires once per JVM, so delete the pod before rehearsing the me
 | No smart trigger recording | Is **Product prices** on and the load **High**? The heap must stay above 35 % for 20 seconds. Otherwise start a recording by hand with the **SwagShopMemoryLeak** template. |
 | The leak stops growing | By design: it stops at 70 % of the heap (`demo.safety.leak-max-heap-ratio`) so the pod never runs out of memory. Switch the scenario off and on to clear it. |
 | The shop page looks outdated after a redeploy | Reload the page. |
+| An order with the checkout problem on is not slow | Set the checkout load to **High** and wait a few seconds. At medium load the lock keeps up, and an order takes well under a second. |
 | A search with the problem on is not slow | Set the search load to **High** and wait a few seconds. Only high load sends more searches than the naive code can handle, so they queue for the three search slots; at medium load a short word such as `hoodie` still takes only about 30 ms. |
 | Cryostat analysis shows "Method Profiling" only as INFO | Use **High** search load; at medium load the hot method uses less than one CPU. Keep the pod's CPU limit at 4: with 2 cores the pod is throttled, JFR takes far fewer samples and the rule stays at INFO. |
 

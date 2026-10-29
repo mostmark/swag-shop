@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicLong;
 
 import jakarta.enterprise.context.ApplicationScoped;
@@ -23,6 +24,13 @@ public class CheckoutService {
 
     public static final int MAX_QUANTITY = 10;
 
+    /**
+     * Orders are processed by at most this many requests at the same time; the others wait in line, first come,
+     * first served. That keeps a rush of orders from tying up every thread of the shop, but while the orders in
+     * progress are stuck, every new order waits behind them.
+     */
+    static final int MAX_CONCURRENT_CHECKOUTS = 8;
+
     public record OrderLine(String productId, int quantity) {
     }
 
@@ -32,6 +40,7 @@ public class CheckoutService {
     public record Order(String orderId, List<OrderItem> items, BigDecimal total, Instant placedAt) {
     }
 
+    private final Semaphore checkoutSlots = new Semaphore(MAX_CONCURRENT_CHECKOUTS, true);
     private final AtomicLong ordersPlaced = new AtomicLong();
 
     @Inject
@@ -59,16 +68,21 @@ public class CheckoutService {
                     .orElseThrow(() -> new IllegalArgumentException("Unknown product " + line.productId())));
         }
 
-        Inventory inventory = activeInventory();
         List<OrderItem> items = new ArrayList<>();
         BigDecimal total = BigDecimal.ZERO;
-        for (int i = 0; i < lines.size(); i++) {
-            OrderLine line = lines.get(i);
-            Product product = products.get(i);
-            inventory.reserve(product.id(), line.quantity());
-            BigDecimal lineTotal = product.price().multiply(BigDecimal.valueOf(line.quantity()));
-            items.add(new OrderItem(product.id(), product.name(), line.quantity(), product.price(), lineTotal));
-            total = total.add(lineTotal);
+        checkoutSlots.acquireUninterruptibly();
+        try {
+            Inventory inventory = activeInventory();
+            for (int i = 0; i < lines.size(); i++) {
+                OrderLine line = lines.get(i);
+                Product product = products.get(i);
+                inventory.reserve(product.id(), line.quantity());
+                BigDecimal lineTotal = product.price().multiply(BigDecimal.valueOf(line.quantity()));
+                items.add(new OrderItem(product.id(), product.name(), line.quantity(), product.price(), lineTotal));
+                total = total.add(lineTotal);
+            }
+        } finally {
+            checkoutSlots.release();
         }
         ordersPlaced.incrementAndGet();
         String orderId = "SW-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();

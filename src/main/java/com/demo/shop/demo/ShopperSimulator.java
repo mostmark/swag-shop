@@ -44,7 +44,9 @@ public class ShopperSimulator {
             // The naive search handles about 13 searches/s on a laptop: high load overloads it, medium does not
             Scenario.SEARCH, new int[] { 2, 6, 30 },
             Scenario.PRICING, new int[] { 5, 15, 30 },
-            Scenario.CHECKOUT, new int[] { 15, 40, 60 });
+            // The global lock lets about 16 checkouts/s through (one 60 ms warehouse call each): high load queues
+            // up behind it, medium does not
+            Scenario.CHECKOUT, new int[] { 3, 8, 30 });
 
     static final int MAX_IN_FLIGHT_PER_SCENARIO = 40;
     private static final Duration TICK = Duration.ofMillis(100);
