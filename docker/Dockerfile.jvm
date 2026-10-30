@@ -1,0 +1,31 @@
+# The image of every Swag Shop service: a Quarkus application in JVM mode. Build the services first
+# (./mvnw package -DskipTests), then build one image per service from the repository root, e.g.
+#
+#   podman build -f docker/Dockerfile.jvm --build-arg SERVICE=search -t swag-shop-search .
+#
+# scripts/build-push-container.sh does this for every service and pushes the images.
+FROM registry.access.redhat.com/ubi9/openjdk-21-runtime:1.24
+
+ARG SERVICE
+ENV LANGUAGE='en_US:en'
+
+COPY --chown=185 ${SERVICE}/target/quarkus-app/lib/ /deployments/lib/
+COPY --chown=185 ${SERVICE}/target/quarkus-app/*.jar /deployments/
+COPY --chown=185 ${SERVICE}/target/quarkus-app/app/ /deployments/app/
+COPY --chown=185 ${SERVICE}/target/quarkus-app/quarkus/ /deployments/quarkus/
+
+# The JFR template that the Cryostat Agent's smart trigger uses for the memory leak (deployed with pricing), and
+# that a recording of any service can be started with
+USER root
+COPY cryostat/SwagShopMemoryLeak.jfc /usr/lib/jvm/jre/lib/jfr/SwagShopMemoryLeak.jfc
+RUN chmod 644 /usr/lib/jvm/jre/lib/jfr/SwagShopMemoryLeak.jfc
+
+# Every service listens on 8080 in its container; the ports 8081-8086 are only for running them side by side
+# on one machine
+EXPOSE 8080
+USER 185
+ENV QUARKUS_HTTP_PORT=8080
+ENV JAVA_OPTS_APPEND="-Dquarkus.http.host=0.0.0.0 -Djava.util.logging.manager=org.jboss.logmanager.LogManager"
+ENV JAVA_APP_JAR="/deployments/quarkus-run.jar"
+
+ENTRYPOINT [ "/opt/jboss/container/java/run/run-java.sh" ]

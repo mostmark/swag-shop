@@ -2,20 +2,30 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.demo</groupId>
-    <artifactId>swag-shop</artifactId>
+    <artifactId>swag-shop-parent</artifactId>
     <version>1.0</version>
-    <packaging>quarkus</packaging>
+    <packaging>pom</packaging>
+    <name>Swag Shop</name>
+    <description>The Swag Shop split into services; each folder is a Quarkus application of its own</description>
+
+    <modules>
+        <module>frontend</module>
+        <module>catalog</module>
+        <module>search</module>
+        <module>pricing</module>
+        <module>inventory</module>
+        <module>order</module>
+        <module>load-generator</module>
+    </modules>
 
     <properties>
         <compiler-plugin.version>3.15.0</compiler-plugin.version>
-        <fontsource.version>5.3.0</fontsource.version>
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.version>3.40.1.1</quarkus.platform.version>
-        <rhds.version>5.0.0</rhds.version>
         <skipITs>true</skipITs>
         <surefire-plugin.version>3.5.6</surefire-plugin.version>
     </properties>
@@ -29,211 +39,58 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
-
-            <!-- Pin the npm dependencies of @rhds/elements: mvnpm publishes npm version ranges,
-                 which Maven cannot always resolve -->
-            <dependency>
-                <groupId>org.mvnpm</groupId>
-                <artifactId>lit</artifactId>
-                <version>3.3.3</version>
-            </dependency>
-            <dependency>
-                <groupId>org.mvnpm</groupId>
-                <artifactId>lit-element</artifactId>
-                <version>4.2.2</version>
-            </dependency>
-            <dependency>
-                <groupId>org.mvnpm</groupId>
-                <artifactId>lit-html</artifactId>
-                <version>3.3.3</version>
-            </dependency>
-            <dependency>
-                <groupId>org.mvnpm.at.lit</groupId>
-                <artifactId>reactive-element</artifactId>
-                <version>2.1.2</version>
-            </dependency>
-            <dependency>
-                <groupId>org.mvnpm.at.lit</groupId>
-                <artifactId>context</artifactId>
-                <version>1.1.6</version>
-            </dependency>
-            <dependency>
-                <groupId>org.mvnpm.at.lit-labs</groupId>
-                <artifactId>ssr-dom-shim</artifactId>
-                <version>1.6.0</version>
-            </dependency>
-            <dependency>
-                <groupId>org.mvnpm.at.types</groupId>
-                <artifactId>trusted-types</artifactId>
-                <version>2.0.7</version>
-            </dependency>
-            <dependency>
-                <groupId>org.mvnpm</groupId>
-                <artifactId>tslib</artifactId>
-                <version>2.8.1</version>
-            </dependency>
-            <dependency>
-                <groupId>org.mvnpm.at.patternfly</groupId>
-                <artifactId>pfe-core</artifactId>
-                <version>6.0.0</version>
-            </dependency>
-            <dependency>
-                <groupId>org.mvnpm.at.rhds</groupId>
-                <artifactId>icons</artifactId>
-                <version>2.3.1</version>
-            </dependency>
-            <dependency>
-                <groupId>org.mvnpm.at.rhds</groupId>
-                <artifactId>tokens</artifactId>
-                <version>3.2.0</version>
-            </dependency>
         </dependencies>
     </dependencyManagement>
 
-    <dependencies>
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-arc</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-rest-jackson</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-jfr</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-web-dependency-locator</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-smallrye-health</artifactId>
-        </dependency>
-
-        <!-- Red Hat Design System web components and fonts, served from mvnpm jars -->
-        <dependency>
-            <groupId>org.mvnpm.at.rhds</groupId>
-            <artifactId>elements</artifactId>
-            <version>${rhds.version}</version>
-            <scope>runtime</scope>
-            <exclusions>
-                <!-- only used by rh-code-block, which the shop does not use -->
-                <exclusion>
-                    <groupId>org.mvnpm</groupId>
-                    <artifactId>prism-esm</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>org.mvnpm.at.fontsource</groupId>
-            <artifactId>red-hat-display</artifactId>
-            <version>${fontsource.version}</version>
-            <scope>runtime</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.mvnpm.at.fontsource</groupId>
-            <artifactId>red-hat-text</artifactId>
-            <version>${fontsource.version}</version>
-            <scope>runtime</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.mvnpm.at.fontsource</groupId>
-            <artifactId>red-hat-mono</artifactId>
-            <version>${fontsource.version}</version>
-            <scope>runtime</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-junit</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.rest-assured</groupId>
-            <artifactId>rest-assured</artifactId>
-            <scope>test</scope>
-        </dependency>
-    </dependencies>
-
-    <repositories>
-        <!-- mvnpm serves npm packages (such as @rhds/elements) as Maven artifacts on demand -->
-        <repository>
-            <id>mvnpm.org</id>
-            <name>mvnpm</name>
-            <url>https://repo.mvnpm.org/maven2</url>
-            <releases>
-                <enabled>true</enabled>
-            </releases>
-            <snapshots>
-                <enabled>false</enabled>
-            </snapshots>
-        </repository>
-    </repositories>
-
     <build>
-        <resources>
-            <resource>
-                <directory>src/main/resources</directory>
-            </resource>
-            <!-- The demo control page shows the naive and fixed code of each scenario -->
-            <resource>
-                <directory>src/main/java</directory>
-                <targetPath>shop-source</targetPath>
-                <includes>
-                    <include>com/demo/shop/search/*EditDistance.java</include>
-                    <include>com/demo/shop/pricing/*QuoteCache.java</include>
-                    <include>com/demo/shop/inventory/*Inventory.java</include>
-                </includes>
-            </resource>
-        </resources>
-        <plugins>
-            <plugin>
-                <groupId>${quarkus.platform.group-id}</groupId>
-                <artifactId>quarkus-maven-plugin</artifactId>
-                <version>${quarkus.platform.version}</version>
-                <extensions>true</extensions>
-            </plugin>
-            <plugin>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>${compiler-plugin.version}</version>
-                <configuration>
-                    <parameters>true</parameters>
-                </configuration>
-            </plugin>
-            <plugin>
-                <artifactId>maven-surefire-plugin</artifactId>
-                <version>${surefire-plugin.version}</version>
-                <configuration>
-                    <argLine>@{argLine}</argLine>
-                    <systemPropertyVariables>
-                        <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
-                        <maven.home>${maven.home}</maven.home>
-                    </systemPropertyVariables>
-                </configuration>
-            </plugin>
-            <plugin>
-                <artifactId>maven-failsafe-plugin</artifactId>
-                <version>${surefire-plugin.version}</version>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>integration-test</goal>
-                            <goal>verify</goal>
-                        </goals>
-                    </execution>
-                </executions>
-                <configuration>
-                    <argLine>@{argLine}</argLine>
-                    <systemPropertyVariables>
-                        <native.image.path>${project.build.directory}/${project.build.finalName}-runner</native.image.path>
-                        <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
-                        <maven.home>${maven.home}</maven.home>
-                    </systemPropertyVariables>
-                </configuration>
-            </plugin>
-        </plugins>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>${quarkus.platform.group-id}</groupId>
+                    <artifactId>quarkus-maven-plugin</artifactId>
+                    <version>${quarkus.platform.version}</version>
+                    <extensions>true</extensions>
+                </plugin>
+                <plugin>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>${compiler-plugin.version}</version>
+                    <configuration>
+                        <parameters>true</parameters>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>${surefire-plugin.version}</version>
+                    <configuration>
+                        <argLine>@{argLine}</argLine>
+                        <systemPropertyVariables>
+                            <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
+                            <maven.home>${maven.home}</maven.home>
+                        </systemPropertyVariables>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <artifactId>maven-failsafe-plugin</artifactId>
+                    <version>${surefire-plugin.version}</version>
+                    <executions>
+                        <execution>
+                            <goals>
+                                <goal>integration-test</goal>
+                                <goal>verify</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                    <configuration>
+                        <argLine>@{argLine}</argLine>
+                        <systemPropertyVariables>
+                            <native.image.path>${project.build.directory}/${project.build.finalName}-runner</native.image.path>
+                            <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
+                            <maven.home>${maven.home}</maven.home>
+                        </systemPropertyVariables>
+                    </configuration>
+                </plugin>
+            </plugins>
+        </pluginManagement>
     </build>
 
     <profiles>

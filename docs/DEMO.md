@@ -4,9 +4,9 @@ Two demos for a 40-minute introductory session:
 
 | Part | Time | Where | Story |
 |---|---|---|---|
-| Demo 1 | ~5 min | Laptop, JDK Mission Control | "JFR is built into the JVM: find a CPU hotspot and fix it" |
+| Demo 1 | ~5 min | Laptop: the search service, JDK Mission Control | "JFR is built into the JVM: find a CPU hotspot and fix it" |
 | Slides | | | "Now do that for pod 3 of 12 in OpenShift" → Cryostat |
-| Demo 2 | 12–15 min | OpenShift, Cryostat | Discovery, lock contention, a memory leak captured automatically, evidence that survives the pod |
+| Demo 2 | 12–15 min | OpenShift, Cryostat: the whole shop as seven services | Discovery, lock contention in the wrong service, a memory leak captured automatically, evidence that survives the pod |
 
 Everything below was rehearsed against the lab cluster (Cryostat 4.2, Cryostat Agent 0.7.0) and JMC 9.1.2.
 
@@ -16,38 +16,51 @@ Everything below was rehearsed against the lab cluster (Cryostat 4.2, Cryostat A
 
 ### Laptop (demo 1)
 
+Demo 1 uses only the search service, on its own: one JVM with its own copy of the product list, and a load
+script instead of the web shop.
+
 ```shell
-./mvnw package -DskipTests
-java -Xmx256m -jar target/quarkus-app/quarkus-run.jar
+./mvnw -pl search package -DskipTests
+java -Dquarkus.profile=standalone -jar search/target/quarkus-app/quarkus-run.jar
 ```
 
-- [ ] <http://localhost:8080/demo.html> shows **Simulated shoppers are sending traffic** and all three scenarios **Fixed**.
+- [ ] Terminal 1 (the service) shows **Loaded 8 products from the bundled products.json** and **Listening on:
+  http://0.0.0.0:8082**.
+- [ ] Terminal 2 (big font, the audience watches it): `java scripts/SearchLoad.java high` is running and prints a
+  line every second, with searches answered in a few milliseconds.
 - [ ] JDK Mission Control is open. Close old recordings.
-- [ ] A terminal in the project folder, with these commands ready to paste:
+- [ ] Terminal 3 in the project folder, with these commands ready to paste:
   ```shell
-  jcmd $(pgrep -f quarkus-run.jar) JFR.start name=demo settings=profile
-  jcmd $(pgrep -f quarkus-run.jar) JFR.dump name=demo filename=recordings/live-cpu.jfr
+  scripts/search-problem.sh on
+  jcmd $(pgrep -f search/target/quarkus-app) JFR.start name=demo settings=profile
+  jcmd $(pgrep -f search/target/quarkus-app) JFR.dump name=demo filename=recordings/live-cpu.jfr
+  scripts/search-problem.sh off
   ```
-- [ ] The IDE is open on `src/main/java/com/demo/shop/search/RecursiveEditDistance.java` and
+- [ ] The IDE is open on `search/src/main/java/com/demo/shop/search/RecursiveEditDistance.java` and
   `IterativeEditDistance.java`.
 
 ### Cluster (demo 2)
 
+Demo 2 uses the whole shop: seven services in the project `swag-shop`, deployed from the manifests in
+[swag-shop-gitops](https://github.com/mostmark/swag-shop-gitops) (with the script below, or with Argo CD).
+
 ```shell
 oc login ...
-scripts/build-push-container.sh                # only if the app changed (needs QUAY_USER and podman login)
-scripts/openshift-deploy.sh cryostat-demo1     # applies the resources and restarts the pod
+scripts/build-push-container.sh                # only if a service changed (needs QUAY_USER and podman login)
+scripts/openshift-deploy.sh                    # applies swag-shop.yaml from the gitops repo, restarts the pods that exist
 scripts/cryostat-setup.sh                      # creates the automated rule (once; safe to run again)
-oc delete pod -n cryostat-demo1 -l app.kubernetes.io/name=swag-shop   # fresh JVM, empty heap, trigger re-armed
+oc delete pod -n swag-shop -l app.kubernetes.io/part-of=swag-shop-demo   # fresh JVMs, empty heap, trigger re-armed
 ```
 
-- [ ] Shop: `https://swag-shop-cryostat-demo1.apps.<cluster-domain>` and its `/demo.html`.
-  Shoppers on, everything **Fixed**.
-- [ ] Cryostat console: `https://cryostat-sample-cryostat.apps.<cluster-domain>`. The new `swag-shop-…` pod
-  appears as a target about 15 seconds after it starts.
-- [ ] `<cluster-domain>` is your cluster's apps domain; `oc get route -n cryostat-demo1 swag-shop` and
+- [ ] Shop: `https://swag-shop-frontend-swag-shop.apps.<cluster-domain>` and its `/demo.html`.
+  Shoppers on, everything **Fixed**, every card shows a JVM line.
+- [ ] Cryostat console: `https://cryostat-sample-cryostat.apps.<cluster-domain>`. The seven `swag-shop-…` pods
+  appear as targets about 15 seconds after they start.
+- [ ] `<cluster-domain>` is your cluster's apps domain; `oc get route -n swag-shop swag-shop-frontend` and
   `oc get route -n cryostat cryostat-sample` show the full host names.
-- [ ] The automated rule `swag_shop_continuous` has started a recording on the pod (Recordings view).
+- [ ] The automated rule `swag_shop_continuous` has started a recording on every pod (Recordings view).
+- [ ] OpenShift console, **Topology** of `swag-shop`: the seven services, with arrows for the calls between
+  them.
 - [ ] Optional: delete old archives from earlier rehearsals so the Archives view is clean.
 - [ ] Browser zoom at 125–150% for the projector.
 
@@ -58,10 +71,14 @@ instead:
 
 | File | Shows |
 |---|---|
-| `backup-cpu-hotspot-search.jfr` | Method Profiling WARNING on `RecursiveEditDistance.distance` |
-| `backup-lock-contention-checkout.jfr` | Java Blocking WARNING (score 100) on the `SynchronizedInventory` monitor |
-| `backup-memory-leak-pricing.jfr` | Heap Live Set Trend WARNING (score 100) with the leak candidate |
-| `backup-all-fixed-baseline.jfr` | The same shop with all fixes: no warnings from the scenarios |
+| `backup-demo1-search-standalone.jfr` | Demo 1: Method Profiling WARNING on `RecursiveEditDistance.distance` (Profiling template, laptop) |
+| `backup-demo2-lock-contention-inventory.jfr` | Demo 2: Java Blocking WARNING (score 99) on the `SynchronizedInventory` monitor (inventory pod, Continuous template) |
+| `backup-demo2-lock-contention-order.jfr` | Demo 2: the order pod at the same time: no warnings from the scenario |
+| `backup-demo2-memory-leak-pricing.jfr` | Demo 2: Heap Live Set Trend WARNING (score 100), old object samples held by `RequestQuoteCache` (pricing pod, archived by the Agent) |
+| `backup-demo2-cpu-hotspot-search.jfr` | Demo 2, optional part: Method Profiling WARNING (search pod, Continuous template) |
+
+The older `backup-*.jfr` recordings without `demo1`/`demo2` in the name come from the single-application shop on
+the `main` branch.
 
 Check any recording without opening JMC: `scripts/jfr-rules.sh recordings/<file>.jfr`.
 
@@ -71,17 +88,18 @@ Check any recording without opening JMC: `scripts/jfr-rules.sh recordings/<file>
 
 | Time | Do | Say |
 |---|---|---|
-| 0:00 | Show the shop: the product grid, a search for `hoody` (typos welcome). | "A normal Quarkus web shop. Simulated shoppers are using it right now." |
-| 0:30 | Demo control: **Product search** → switch on, load **High**. Wait about 5 seconds, then search the shop for `hoodie` (any word works): the page hangs for 2–4 seconds and the timing turns red. | "Customers complain that search is slow. The CPU is busy, but where?" |
+| 0:00 | Terminal 2: the load script sends 30 searches a second, with typos (`hoody`, `backpak`) and long words (`waterbottle`). Each answer takes a few milliseconds. | "This is the search service of a web shop, a small Quarkus app. These are simulated shoppers using the search box." |
+| 0:30 | Terminal 3: `scripts/search-problem.sh on`. Within about 5 seconds the lines turn red: 2–4 seconds per search, and 40 searches waiting. | "Customers complain that search is slow. The CPU is busy, but where?" |
 | 1:00 | Paste the `JFR.start` command. | "JFR is part of the JVM. No agent, no restart: we just ask the running JVM to record. The overhead is around 1 %." |
-| 2:00 | Paste the `JFR.dump` command after about 60 seconds; open `recordings/live-cpu.jfr` in JMC. | |
+| 2:00 | Paste the `JFR.dump` command after about 60 seconds (at least 45: the rule below looks at 30-second windows); open `recordings/live-cpu.jfr` in JMC. | |
 | 2:15 | **Automated Analysis Results**: "Method Profiling" is red and names `RecursiveEditDistance.distance`. Open the **Method Profiling** page (or the flame graph) to show the deep recursion. | "JMC ran its analysis rules for us, and named the exact method." |
-| 3:00 | IDE: `RecursiveEditDistance`. The textbook recursion calls itself three times per character, so the work explodes: each extra letter in the search word makes it about 2.5 times slower. Long searches from other shoppers hold all three search slots (`ProductSearchService.MAX_CONCURRENT_SEARCHES`), so even a short search waits in line. Show `IterativeEditDistance`. | "Correct code, exponential cost. The fix is the dynamic programming version." |
-| 4:00 | Demo control: switch **Product search** off (fixed code). Search for `hoodie` again: a few milliseconds. | "In real life this is a new deployment; here a switch saves us the build." |
-| 4:30 | Bridge to the slides: | "Now imagine this is pod 3 of 12 in OpenShift. No JMC attached, no shell, and the evidence disappears when the pod restarts." |
+| 3:00 | IDE: `RecursiveEditDistance`. The textbook recursion calls itself three times per character, so the work explodes: each extra letter in the search word makes it about 2.5 times slower. Long searches hold all three search slots (`ProductSearchService.MAX_CONCURRENT_SEARCHES`), so even a short search waits in line. Show `IterativeEditDistance`. | "Correct code, exponential cost. The fix is the dynamic programming version." |
+| 4:00 | Terminal 3: `scripts/search-problem.sh off`. Within about 5 seconds the lines are back to milliseconds. | "In real life this is a new deployment; here a switch saves us the build." |
+| 4:30 | Bridge to the slides: | "Now imagine this is one of a dozen services in OpenShift, each with several pods. No JMC attached, no shell, and the evidence disappears when the pod restarts." |
 
-Also worth a mention: the recording contains the shop's own **Swag Shop › Demo › Problem Toggled** event, which shows
-exactly when the problem was switched on, and Quarkus adds an event for every REST request.
+Also worth a mention: the recording contains the service's own **Swag Shop › Demo › Problem Toggled** event, which
+shows exactly when the problem was switched on and by what (**Changed By**: `search-problem.sh`), and Quarkus adds an
+event for every REST request.
 
 ---
 
@@ -91,43 +109,47 @@ exactly when the problem was switched on, and Quarkus adds an event for every RE
 
 | Do | Say |
 |---|---|
-| Show the deployment's pod labels `cryostat.io/name` and `cryostat.io/namespace` (OpenShift console or `openshift/swag-shop.yaml`). | "Two labels. The Cryostat Operator injects the Cryostat Agent into the pod." |
-| Cryostat: **Topology**, then the swag-shop target; **Dashboard** with the JVM charts. | "Every Java pod in the namespace shows up by itself." |
-| **Automated Rules**: `swag_shop_continuous`. **Recordings**: its continuous recording is already running. | "A rule says: every Swag Shop pod gets a continuous, low-overhead recording from the moment it starts." |
+| OpenShift console, **Topology** of `swag-shop`: frontend, catalog, search, pricing, inventory, order and the load generator. | "The same shop, now as it would run in production: seven services, seven JVMs." |
+| Show the pod labels `cryostat.io/name` and `cryostat.io/namespace` (a deployment's YAML, or `manifests/swag-shop-inventory-deployment.yaml` in the gitops repo). | "Two labels. The Cryostat Operator injects the Cryostat Agent into each pod." |
+| Cryostat: **Topology**, the seven `swag-shop-…` targets; **Dashboard** of one of them. | "Every Java pod in the namespace shows up by itself." |
+| **Automated Rules**: `swag_shop_continuous`. **Recordings** of any pod: its continuous recording is already running. | "A rule says: every Swag Shop pod gets a continuous, low-overhead recording from the moment it starts." |
 
-### 2. Lock contention: slow, but not busy (~3–4 min)
+### 2. Lock contention: slow, but in which service? (~4 min)
 
 | Do | Say |
 |---|---|
 | Demo control: **Checkout** → switch on, load **High**. Wait about 5 seconds, then place an order in the shop: it hangs for about 2.5 seconds. | "Checkout is slow." |
-| Dashboard: CPU stays flat. Demo control shows checkout latency around 2.5 s while CPU is low. | "But nothing is busy. Metrics cannot tell us why." |
-| After about 60 seconds: **Recordings** → the continuous recording → **Automated Analysis**. "Java Blocking" is red, with threads blocked for minutes on the `SynchronizedInventory` monitor. | "Threads are waiting for one lock." |
-| Demo control → Checkout → **View code**: `public synchronized Reservation reserve`, with the slow warehouse call inside the lock. The **Fix** tab: per-product locks, slow call outside. | |
-| Switch **Checkout** off. Latency drops to about 65 ms (one warehouse call). | |
+| The Checkout card: 2.5 s per order, and its JVM line shows the **order** service, the one the shop calls for checkout: CPU about 0.1 cores, heap low. | "The order service is slow, but it is not doing anything. Metrics cannot tell us why." |
+| Cryostat: the **order** pod's continuous recording → **Automated Analysis**. "REST response duration" is red (its requests are slow), but nothing about locks or CPU. | "JFR in the order service sees slow requests, and threads that wait for an answer." |
+| The **inventory** pod's continuous recording → **Automated Analysis**: "Java Blocking" is red (score 100), with threads blocked for minutes on the `SynchronizedInventory` monitor. | "Order waits for inventory, and inside inventory the threads wait for one lock. Same tool, every service: that is how you find the service that is really at fault." |
+| Demo control → Checkout → **View code**: `public synchronized Reservation reserve` in `inventory/…`, with the slow warehouse call inside the lock. The **Fix** tab: per-product locks, slow call outside. | |
+| Switch **Checkout** off. Orders drop to about 70 ms (one warehouse call). | |
 
 ### 3. A memory leak, captured automatically (~5 min)
 
 | Do | Say |
 |---|---|
-| Demo control: **Product prices** → switch on, load **High**. The heap chart climbs like a staircase; the card counts leaked price quotes. | "Product pages now leak memory. In production this ends with an OOMKilled pod." |
-| Show the `CRYOSTAT_AGENT_SMART_TRIGGER_DEFINITIONS` variable in the deployment: `[HeapMemoryUsagePercent>0.35;TargetDuration>duration("20s")]~SwagShopMemoryLeak`. | "A smart trigger: when the heap stays more than 35 % full for 20 seconds, the Agent starts a recording by itself." |
-| After 30–60 seconds a recording named `cryostat-smart-trigger-1` appears in **Recordings**. | "Nobody had to be watching." |
-| Wait another 30–60 seconds, then open its **Automated Analysis**: "Heap Live Set Trend" is red (score about 97), and the explanation names the leak candidate held by `com.demo.shop.pricing.RequestQuoteCache.quotes`. | "The SwagShopMemoryLeak template records paths to GC roots, so the analysis can name the object that keeps the leak alive." |
+| Demo control: **Product prices** → switch on, load **High**. The pricing card counts leaked price quotes, and the heap on its JVM line climbs and turns red. | "Product pages now leak memory in the pricing service. In production this ends with an OOMKilled pod." |
+| Show the `CRYOSTAT_AGENT_SMART_TRIGGER_DEFINITIONS` variable in the **pricing** deployment: `[HeapMemoryUsagePercent>0.35;TargetDuration>duration("20s")]~SwagShopMemoryLeak`. | "A smart trigger: when the heap stays more than 35 % full for 20 seconds, the Agent starts a recording by itself." |
+| After about 2 minutes (the heap passes 35 % after about 50 seconds, then has to stay there for 20) a recording named `cryostat-smart-trigger-…` appears in the pricing pod's **Recordings**. | "Nobody had to be watching." |
+| About a minute later, open its **Automated Analysis**: "Heap Live Set Trend" is red (score above 90), and the explanation names the leak candidate held by `com.demo.shop.pricing.RequestQuoteCache.quotes`. | "The SwagShopMemoryLeak template records paths to GC roots, so the analysis can name the object that keeps the leak alive." |
 | Demo control → Product prices → **View code**: the cache key contains the request id, so nothing is ever found or removed. The **Fix** tab: keyed by product, bounded, expiring. | |
-| Delete the pod (OpenShift console, or `oc delete pod -n cryostat-demo1 -l app.kubernetes.io/name=swag-shop`). | "A restart 'fixes' it, and normally the evidence is gone." |
-| **Archives**: the smart trigger recording is there, uploaded by the Agent as the JVM shut down. Its analysis still works. | "With Cryostat, the evidence survives the pod." |
+| Delete the pricing pod (OpenShift console, or `oc delete pod -n swag-shop -l app.kubernetes.io/name=swag-shop-pricing`). | "A restart 'fixes' it, and normally the evidence is gone." |
+| **Archives**: `swag-shop-pricing-…_unknown_….jfr`, uploaded by the Agent as the JVM shut down. Its analysis still shows "Heap Live Set Trend" red, and it still contains the **Problem Toggled** event. | "With Cryostat, the evidence survives the pod." |
 
 ### 4. Wrap-up (~1 min)
 
 - JFR: always on, low overhead, built into the JVM.
 - JMC: analysis that names methods, locks and leaking objects.
 - Cryostat: brings JFR to containers and Kubernetes. It discovers JVMs, records automatically with rules and
-  smart triggers, analyses recordings and keeps them after the pod is gone.
+  smart triggers, analyses recordings and keeps them after the pod is gone. With many services, it shows which
+  JVM has the problem, not just which one is slow.
 
 ### Optional, if there is time: the CPU hotspot in Cryostat
 
-Search **High**, start a recording with the **Profiling** template from **Recordings → Create**, wait 60 seconds,
-and open its Automated Analysis: "Method Profiling" names `RecursiveEditDistance.distance`.
+Demo control: **Product search** → switch on, load **High**. The search card's JVM line shows about 3 busy cores.
+After about 60 seconds, open the search pod's continuous recording → **Automated Analysis**: "Method Profiling"
+names `RecursiveEditDistance.distance`. The Continuous template samples often enough; no extra recording is needed.
 
 ---
 
@@ -153,6 +175,13 @@ and open its Automated Analysis: "Method Profiling" names `RecursiveEditDistance
   at a time, so every new order waits in line for about 2.5 seconds. Without that limit, waiting for a
   `synchronized` lock is luck: Java does not hand it over in arrival order, so half the orders would finish at
   once and the other half would wait twice as long.
+- **Why does the order service look calm, when its eight checkout slots are full?** Its threads wait for the
+  inventory service to answer, or for a free slot (a `Semaphore`). JFR records that as socket reads and thread
+  parks, not as lock contention, and no CPU is used. The lock everybody waits for is in inventory, so that is
+  where "Java Blocking" turns red.
+- **Why does the Checkout card show the order service's JVM?** Each card shows the JVM that shoppers call for that
+  feature. For checkout that is the order service, which is the point: the slow service is not the one with the
+  problem.
 - **What is the overhead?** The Continuous template is designed for production (around 1 %). Profiling and
   memory-leak recordings cost more and are meant for minutes, not days.
 
@@ -161,22 +190,26 @@ and open its Automated Analysis: "Method Profiling" names `RecursiveEditDistance
 ## Reset between rehearsals
 
 1. Demo control → **Reset to defaults** (everything fixed, shoppers on).
-2. Delete the pod for a fresh JVM: `oc delete pod -n cryostat-demo1 -l app.kubernetes.io/name=swag-shop`.
+2. Delete the pods for fresh JVMs: `oc delete pod -n swag-shop -l app.kubernetes.io/part-of=swag-shop-demo`.
 3. In Cryostat, delete old archived recordings if you want a clean Archives view.
 
-The smart trigger fires once per JVM, so delete the pod before rehearsing the memory leak part again.
+The smart trigger fires once per JVM, so delete at least the pricing pod before rehearsing the memory leak part
+again.
 
 ## Troubleshooting
 
 | Problem | Fix |
 |---|---|
 | The pod does not appear in Cryostat | The namespace must be in the Cryostat resource's `targetNamespaces`, and the pod needs the two `cryostat.io` labels. The Agent registers about 15 seconds after start-up. |
-| No smart trigger recording | Is **Product prices** on and the load **High**? The heap must stay above 35 % for 20 seconds. Otherwise start a recording by hand with the **SwagShopMemoryLeak** template. |
-| The leak stops growing | By design: it stops at 70 % of the heap (`demo.safety.leak-max-heap-ratio`) so the pod never runs out of memory. Switch the scenario off and on to clear it. |
+| No smart trigger recording | Is **Product prices** on and the load **High**? The heap must stay above 35 % for 20 seconds, which takes about 2 minutes. The trigger fires once per JVM: delete the pricing pod after a rehearsal. Otherwise start a recording by hand with the **SwagShopMemoryLeak** template. |
+| The leak stops growing | By design: it stops at 70 % of the heap (`pricing.leak-max-heap-ratio`) so the pod never runs out of memory. Switch the scenario off and on to clear it. |
+| A continuous recording is shorter than expected | Cryostat sometimes restarts the rule's recordings, for example when a pod of the shop goes away; the earlier part is in **Archives** (`…_auto_swag_shop_continuous_….jfr`). Do the lock contention part before deleting the pricing pod. |
+| The demo control page shows "–" on a JVM line | That service did not answer within 1.5 seconds, for example while its pod restarts. It comes back by itself. |
+| Pods stay Pending after a deploy | The lab cluster has a single node whose CPU is almost fully reserved. Keep the CPU requests in the gitops repo's manifests small (50m, 100m for search); the limits decide how much a service may use. |
 | The shop page looks outdated after a redeploy | Reload the page. |
 | An order with the checkout problem on is not slow | Set the checkout load to **High** and wait a few seconds. At medium load the lock keeps up, and an order takes well under a second. |
-| A search with the problem on is not slow | Set the search load to **High** and wait a few seconds. Only high load sends more searches than the naive code can handle, so they queue for the three search slots; at medium load a short word such as `hoodie` still takes only about 30 ms. |
-| Cryostat analysis shows "Method Profiling" only as INFO | Use **High** search load; at medium load the hot method uses less than one CPU. Keep the pod's CPU limit at 4: with 2 cores the pod is throttled, JFR takes far fewer samples and the rule stays at INFO. |
+| A search with the problem on is not slow | Use high load (`java scripts/SearchLoad.java high`, or **High** on the demo control page) and wait a few seconds. Only high load sends more searches than the naive code can handle, so they queue for the three search slots; at medium load a short word such as `hoodie` still takes only about 30 ms. |
+| JMC or Cryostat analysis shows "Method Profiling" only as INFO | Use high search load; at medium load the hot method uses less than one CPU. The recording needs at least 45 seconds with the problem on: the rule looks at 30-second windows. Keep the search pod's CPU limit at 4: with 2 cores the pod is throttled, JFR takes far fewer samples and the rule stays at INFO. |
 
 ---
 
@@ -186,10 +219,13 @@ Things that need a human eye, on the projector if possible:
 
 - [ ] Shop and demo control page are readable at the projector's resolution, in the colour scheme you will use
   (the footer has a light/dark/system switch).
-- [ ] JMC: open `recordings/backup-cpu-hotspot-search.jfr`; check the Automated Analysis page, the Method Profiling
-  page and the flame graph.
-- [ ] JMC: open `recordings/backup-memory-leak-pricing.jfr`; check Memory → Memory Leak (Old Object Sample) shows
-  the reference chain to `RequestQuoteCache`.
+- [ ] JMC: open `recordings/backup-demo1-search-standalone.jfr`; check the Automated Analysis page, the Method
+  Profiling page and the flame graph.
+- [ ] JMC: open `recordings/backup-demo2-memory-leak-pricing.jfr`; check Memory → Memory Leak (Old Object Sample)
+  shows the reference chain to `RequestQuoteCache`.
+- [ ] Cryostat: the order pod's Automated Analysis during the checkout problem shows "REST response duration" but
+  no "Java Blocking", and the inventory pod's shows "Java Blocking".
 - [ ] Cryostat: the Dashboard charts, the Recordings view and the Automated Analysis view of a recording, and
   the Archives view.
+- [ ] OpenShift Topology view of `swag-shop`: the arrows between the services are readable.
 - [ ] Run through demo 2 once on the cluster and time it.
