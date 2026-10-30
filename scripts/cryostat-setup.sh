@@ -22,11 +22,21 @@ CRYOSTAT="https://$HOST"
 TOKEN="$(oc whoami -t)"
 auth=(-H "Authorization: Bearer $TOKEN")
 
+# When this machine does not trust the route's certificate (a cluster whose routes are signed by its own CA),
+# verify it with the cluster's ingress CA instead
+tls=()
+if ! curl -sS -o /dev/null "$CRYOSTAT/health" 2>/dev/null; then
+  ca="$(mktemp)"
+  trap 'rm -f "$ca"' EXIT
+  oc get configmap default-ingress-cert -n openshift-config-managed -o jsonpath='{.data.ca-bundle\.crt}' >"$ca"
+  tls=(--cacert "$ca")
+fi
+
 # Calls the Cryostat API and prints the answer; on an HTTP error, prints Cryostat's answer and stops
 request() {
   local body status
   body="$(mktemp)"
-  status="$(curl -sS -o "$body" -w '%{http_code}' "${auth[@]}" "$@")"
+  status="$(curl -sS -o "$body" -w '%{http_code}' ${tls[@]+"${tls[@]}"} "${auth[@]}" "$@")"
   if [[ "$status" != 2* ]]; then
     echo "Cryostat answered HTTP $status:" >&2
     cat "$body" >&2
