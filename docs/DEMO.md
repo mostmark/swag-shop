@@ -41,12 +41,13 @@ java -Dquarkus.profile=standalone -jar search/target/quarkus-app/quarkus-run.jar
 
 ### Cluster (demo 2)
 
-Demo 2 uses the whole shop: seven services in the project `swag-shop`.
+Demo 2 uses the whole shop: seven services in the project `swag-shop`, deployed from the manifests in
+[swag-shop-gitops](https://github.com/mostmark/swag-shop-gitops) (with the script below, or with Argo CD).
 
 ```shell
 oc login ...
 scripts/build-push-container.sh                # only if a service changed (needs QUAY_USER and podman login)
-scripts/openshift-deploy.sh swag-shop     # applies the resources and restarts the pods that exist
+scripts/openshift-deploy.sh                    # applies swag-shop.yaml from the gitops repo, restarts the pods that exist
 scripts/cryostat-setup.sh                      # creates the automated rule (once; safe to run again)
 oc delete pod -n swag-shop -l app.kubernetes.io/part-of=swag-shop-demo   # fresh JVMs, empty heap, trigger re-armed
 ```
@@ -109,7 +110,7 @@ event for every REST request.
 | Do | Say |
 |---|---|
 | OpenShift console, **Topology** of `swag-shop`: frontend, catalog, search, pricing, inventory, order and the load generator. | "The same shop, now as it would run in production: seven services, seven JVMs." |
-| Show the pod labels `cryostat.io/name` and `cryostat.io/namespace` (a deployment's YAML, or `openshift/inventory.yaml`). | "Two labels. The Cryostat Operator injects the Cryostat Agent into each pod." |
+| Show the pod labels `cryostat.io/name` and `cryostat.io/namespace` (a deployment's YAML, or `manifests/swag-shop-inventory-deployment.yaml` in the gitops repo). | "Two labels. The Cryostat Operator injects the Cryostat Agent into each pod." |
 | Cryostat: **Topology**, the seven `swag-shop-…` targets; **Dashboard** of one of them. | "Every Java pod in the namespace shows up by itself." |
 | **Automated Rules**: `swag_shop_continuous`. **Recordings** of any pod: its continuous recording is already running. | "A rule says: every Swag Shop pod gets a continuous, low-overhead recording from the moment it starts." |
 
@@ -204,7 +205,7 @@ again.
 | The leak stops growing | By design: it stops at 70 % of the heap (`pricing.leak-max-heap-ratio`) so the pod never runs out of memory. Switch the scenario off and on to clear it. |
 | A continuous recording is shorter than expected | Cryostat sometimes restarts the rule's recordings, for example when a pod of the shop goes away; the earlier part is in **Archives** (`…_auto_swag_shop_continuous_….jfr`). Do the lock contention part before deleting the pricing pod. |
 | The demo control page shows "–" on a JVM line | That service did not answer within 1.5 seconds, for example while its pod restarts. It comes back by itself. |
-| Pods stay Pending after a deploy | The lab cluster has a single node whose CPU is almost fully reserved. Keep the CPU requests in `openshift/*.yaml` small (50m, 100m for search); the limits decide how much a service may use. |
+| Pods stay Pending after a deploy | The lab cluster has a single node whose CPU is almost fully reserved. Keep the CPU requests in the gitops repo's manifests small (50m, 100m for search); the limits decide how much a service may use. |
 | The shop page looks outdated after a redeploy | Reload the page. |
 | An order with the checkout problem on is not slow | Set the checkout load to **High** and wait a few seconds. At medium load the lock keeps up, and an order takes well under a second. |
 | A search with the problem on is not slow | Use high load (`java scripts/SearchLoad.java high`, or **High** on the demo control page) and wait a few seconds. Only high load sends more searches than the naive code can handle, so they queue for the three search slots; at medium load a short word such as `hoodie` still takes only about 30 ms. |

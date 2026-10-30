@@ -107,11 +107,15 @@ values. Set them in each service's `src/main/resources/application.properties` o
 Requires an OpenShift cluster with the Cryostat Operator, a Cryostat instance whose target namespaces include
 the namespace you deploy to, and `oc` logged in.
 
+The OpenShift manifests are in a repository of their own,
+[swag-shop-gitops](https://github.com/mostmark/swag-shop-gitops): one file per resource in `manifests/` (the path
+for Argo CD) and all of them in `swag-shop.yaml`.
+
 ```shell
 export QUAY_USER=mostmark
 scripts/build-push-container.sh               # build the services and an image per service, push them to quay.io
 scripts/build-push-container.sh search        # ... or only the services named
-scripts/openshift-deploy.sh swag-shop    # deploy them and restart the pods to pull the new images
+scripts/openshift-deploy.sh                   # deploy to swag-shop and restart the pods to pull the new images
 ```
 
 `build-push-container.sh` builds every service's image from [docker/Dockerfile.jvm](docker/Dockerfile.jvm) for
@@ -119,9 +123,10 @@ scripts/openshift-deploy.sh swag-shop    # deploy them and restart the pods to p
 `quay.io/$QUAY_USER/swag-shop-<service>:latest` (log in first with `podman login quay.io`; the repositories must be
 public, or the namespace needs a pull secret). In their containers, all services listen on port 8080.
 
-`openshift-deploy.sh` applies the files in [openshift/](openshift/), one per service, which use
-`quay.io/mostmark/swag-shop-<service>:latest` (with `QUAY_USER` set, the script switches to your repositories).
-Only the frontend has a route. Every pod carries the labels `cryostat.io/name` and `cryostat.io/namespace`, so the
+`openshift-deploy.sh` applies `swag-shop.yaml` from the gitops repository (set `SWAG_SHOP_MANIFESTS` to a URL or
+file to deploy another copy, for example a fork that uses your own images). The manifests use
+`quay.io/mostmark/swag-shop-<service>:latest`, so pods only get a newly pushed image when they restart: the script
+restarts them, and with Argo CD, restart the deployments yourself. Only the frontend has a route. Every pod carries the labels `cryostat.io/name` and `cryostat.io/namespace`, so the
 Cryostat Operator injects the Cryostat Agent, which registers the pod with Cryostat. In the pricing pod, the
 Agent also runs a smart trigger that starts a recording with the memory leak template when the heap stays more
 than 35 % full for 20 seconds. The images add [cryostat/SwagShopMemoryLeak.jfc](cryostat/SwagShopMemoryLeak.jfc)
@@ -148,7 +153,7 @@ inventory/        stock and the two inventory implementations                 (l
 order/            checkout
 load-generator/   simulated shoppers and their response times
 docker/           the Dockerfile of every service
-openshift/        OpenShift resources, one file per service
+cryostat/         the memory leak recording template, added to the images
 scripts/          local run, demo 1, image build and push, deployment, Cryostat setup and JFR analysis scripts
 docs/DEMO.md      demo script for the talk
 ```
