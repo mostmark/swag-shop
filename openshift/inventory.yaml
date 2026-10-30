@@ -14,9 +14,6 @@ metadata:
     app.kubernetes.io/part-of: swag-shop-demo
     # Shows the Quarkus icon in the OpenShift topology view
     app.openshift.io/runtime: quarkus
-  annotations:
-    # Draws the calls between the services in the OpenShift topology view
-    app.openshift.io/connects-to: '[{"apiVersion":"apps/v1","kind":"Deployment","name":"swag-shop-catalog"}]'
 spec:
   replicas: 1
   selector:

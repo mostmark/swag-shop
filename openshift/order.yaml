@@ -15,8 +15,9 @@ metadata:
     # Shows the Quarkus icon in the OpenShift topology view
     app.openshift.io/runtime: quarkus
   annotations:
-    # Draws the calls between the services in the OpenShift topology view
-    app.openshift.io/connects-to: '[{"apiVersion":"apps/v1","kind":"Deployment","name":"swag-shop-catalog"},{"apiVersion":"apps/v1","kind":"Deployment","name":"swag-shop-inventory"}]'
+    # Draws the calls this service makes while it runs in the OpenShift topology view (the services fetch the
+    # products from the catalog only at start-up, so that is left out)
+    app.openshift.io/connects-to: '[{"apiVersion":"apps/v1","kind":"Deployment","name":"swag-shop-inventory"}]'
 spec:
   replicas: 1
   selector:
