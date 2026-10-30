@@ -2,14 +2,14 @@
 # Deploys the Swag Shop services from quay.io to OpenShift. Build and push the images first with
 # scripts/build-push-container.sh.
 #
-#   scripts/openshift-deploy.sh [namespace]      (default namespace: cryostat-demo2)
+#   scripts/openshift-deploy.sh [namespace]      (default namespace: swag-shop)
 #
 # The namespace must be one that Cryostat watches (the Cryostat resource's targetNamespaces), and you must be
 # logged in with oc. Set QUAY_USER to deploy the images from quay.io/$QUAY_USER instead of the ones in
 # openshift/*.yaml.
 set -euo pipefail
 
-NAMESPACE="${1:-cryostat-demo2}"
+NAMESPACE="${1:-swag-shop}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SERVICES="catalog search pricing inventory order frontend load-generator"
 

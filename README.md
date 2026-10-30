@@ -111,7 +111,7 @@ the namespace you deploy to, and `oc` logged in.
 export QUAY_USER=mostmark
 scripts/build-push-container.sh               # build the services and an image per service, push them to quay.io
 scripts/build-push-container.sh search        # ... or only the services named
-scripts/openshift-deploy.sh cryostat-demo2    # deploy them and restart the pods to pull the new images
+scripts/openshift-deploy.sh swag-shop    # deploy them and restart the pods to pull the new images
 ```
 
 `build-push-container.sh` builds every service's image from [docker/Dockerfile.jvm](docker/Dockerfile.jvm) for
@@ -132,7 +132,7 @@ it by name. When a pod stops, the Agent uploads its recordings to Cryostat's arc
 Swag Shop pod. Remove everything the demo created with:
 
 ```shell
-oc delete all -l app.kubernetes.io/part-of=swag-shop-demo -n cryostat-demo2
+oc delete all -l app.kubernetes.io/part-of=swag-shop-demo -n swag-shop
 ```
 
 ## Project layout

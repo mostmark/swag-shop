@@ -41,24 +41,24 @@ java -Dquarkus.profile=standalone -jar search/target/quarkus-app/quarkus-run.jar
 
 ### Cluster (demo 2)
 
-Demo 2 uses the whole shop: seven services in the project `cryostat-demo2`.
+Demo 2 uses the whole shop: seven services in the project `swag-shop`.
 
 ```shell
 oc login ...
 scripts/build-push-container.sh                # only if a service changed (needs QUAY_USER and podman login)
-scripts/openshift-deploy.sh cryostat-demo2     # applies the resources and restarts the pods that exist
+scripts/openshift-deploy.sh swag-shop     # applies the resources and restarts the pods that exist
 scripts/cryostat-setup.sh                      # creates the automated rule (once; safe to run again)
-oc delete pod -n cryostat-demo2 -l app.kubernetes.io/part-of=swag-shop-demo   # fresh JVMs, empty heap, trigger re-armed
+oc delete pod -n swag-shop -l app.kubernetes.io/part-of=swag-shop-demo   # fresh JVMs, empty heap, trigger re-armed
 ```
 
-- [ ] Shop: `https://swag-shop-frontend-cryostat-demo2.apps.<cluster-domain>` and its `/demo.html`.
+- [ ] Shop: `https://swag-shop-frontend-swag-shop.apps.<cluster-domain>` and its `/demo.html`.
   Shoppers on, everything **Fixed**, every card shows a JVM line.
 - [ ] Cryostat console: `https://cryostat-sample-cryostat.apps.<cluster-domain>`. The seven `swag-shop-…` pods
   appear as targets about 15 seconds after they start.
-- [ ] `<cluster-domain>` is your cluster's apps domain; `oc get route -n cryostat-demo2 swag-shop-frontend` and
+- [ ] `<cluster-domain>` is your cluster's apps domain; `oc get route -n swag-shop swag-shop-frontend` and
   `oc get route -n cryostat cryostat-sample` show the full host names.
 - [ ] The automated rule `swag_shop_continuous` has started a recording on every pod (Recordings view).
-- [ ] OpenShift console, **Topology** of `cryostat-demo2`: the seven services, with arrows for the calls between
+- [ ] OpenShift console, **Topology** of `swag-shop`: the seven services, with arrows for the calls between
   them.
 - [ ] Optional: delete old archives from earlier rehearsals so the Archives view is clean.
 - [ ] Browser zoom at 125–150% for the projector.
@@ -108,7 +108,7 @@ event for every REST request.
 
 | Do | Say |
 |---|---|
-| OpenShift console, **Topology** of `cryostat-demo2`: frontend, catalog, search, pricing, inventory, order and the load generator. | "The same shop, now as it would run in production: seven services, seven JVMs." |
+| OpenShift console, **Topology** of `swag-shop`: frontend, catalog, search, pricing, inventory, order and the load generator. | "The same shop, now as it would run in production: seven services, seven JVMs." |
 | Show the pod labels `cryostat.io/name` and `cryostat.io/namespace` (a deployment's YAML, or `openshift/inventory.yaml`). | "Two labels. The Cryostat Operator injects the Cryostat Agent into each pod." |
 | Cryostat: **Topology**, the seven `swag-shop-…` targets; **Dashboard** of one of them. | "Every Java pod in the namespace shows up by itself." |
 | **Automated Rules**: `swag_shop_continuous`. **Recordings** of any pod: its continuous recording is already running. | "A rule says: every Swag Shop pod gets a continuous, low-overhead recording from the moment it starts." |
@@ -133,7 +133,7 @@ event for every REST request.
 | After about 2 minutes (the heap passes 35 % after about 50 seconds, then has to stay there for 20) a recording named `cryostat-smart-trigger-…` appears in the pricing pod's **Recordings**. | "Nobody had to be watching." |
 | About a minute later, open its **Automated Analysis**: "Heap Live Set Trend" is red (score above 90), and the explanation names the leak candidate held by `com.demo.shop.pricing.RequestQuoteCache.quotes`. | "The SwagShopMemoryLeak template records paths to GC roots, so the analysis can name the object that keeps the leak alive." |
 | Demo control → Product prices → **View code**: the cache key contains the request id, so nothing is ever found or removed. The **Fix** tab: keyed by product, bounded, expiring. | |
-| Delete the pricing pod (OpenShift console, or `oc delete pod -n cryostat-demo2 -l app.kubernetes.io/name=swag-shop-pricing`). | "A restart 'fixes' it, and normally the evidence is gone." |
+| Delete the pricing pod (OpenShift console, or `oc delete pod -n swag-shop -l app.kubernetes.io/name=swag-shop-pricing`). | "A restart 'fixes' it, and normally the evidence is gone." |
 | **Archives**: `swag-shop-pricing-…_unknown_….jfr`, uploaded by the Agent as the JVM shut down. Its analysis still shows "Heap Live Set Trend" red, and it still contains the **Problem Toggled** event. | "With Cryostat, the evidence survives the pod." |
 
 ### 4. Wrap-up (~1 min)
@@ -189,7 +189,7 @@ names `RecursiveEditDistance.distance`. The Continuous template samples often en
 ## Reset between rehearsals
 
 1. Demo control → **Reset to defaults** (everything fixed, shoppers on).
-2. Delete the pods for fresh JVMs: `oc delete pod -n cryostat-demo2 -l app.kubernetes.io/part-of=swag-shop-demo`.
+2. Delete the pods for fresh JVMs: `oc delete pod -n swag-shop -l app.kubernetes.io/part-of=swag-shop-demo`.
 3. In Cryostat, delete old archived recordings if you want a clean Archives view.
 
 The smart trigger fires once per JVM, so delete at least the pricing pod before rehearsing the memory leak part
@@ -226,5 +226,5 @@ Things that need a human eye, on the projector if possible:
   no "Java Blocking", and the inventory pod's shows "Java Blocking".
 - [ ] Cryostat: the Dashboard charts, the Recordings view and the Automated Analysis view of a recording, and
   the Archives view.
-- [ ] OpenShift Topology view of `cryostat-demo2`: the arrows between the services are readable.
+- [ ] OpenShift Topology view of `swag-shop`: the arrows between the services are readable.
 - [ ] Run through demo 2 once on the cluster and time it.
